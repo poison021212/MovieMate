@@ -2,7 +2,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 
 const favoriteApi = createApi({
   reducerPath: 'favoriteApi',
-  baseQuery: fetchBaseQuery({ baseUrl: 'http://localhost:1337/api/' }),
+  baseQuery: fetchBaseQuery({ baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:1337/api' }),
   // 配置请求头，添加 Authorization 字段，验证用户身份
   prepareHeaders: (headers, { getState }) => {
     // 从 Redux 状态获取 token

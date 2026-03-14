@@ -3,7 +3,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 
 const reviewApi = createApi({
   reducerPath: 'reviewApi',
-  baseQuery: fetchBaseQuery({ baseUrl: 'http://localhost:1337/api/' }),
+  baseQuery: fetchBaseQuery({ baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:1337/api' }),
   endpoints(builder) {
     return {
       addReview: builder.mutation({

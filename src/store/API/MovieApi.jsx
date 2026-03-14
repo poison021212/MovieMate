@@ -3,9 +3,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 
 const MovieApi = createApi({
   reducerPath: 'movieApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: '/api/',
-  }),
+  baseQuery: fetchBaseQuery({ baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:1337/api' }),
   endpoints: (builder) => {
     return {
       getMovies: builder.query({

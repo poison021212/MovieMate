@@ -20,20 +20,24 @@ const MovieApi = createApi({
           // 处理电影数据
           return baseQueryReturnValue.data.map(movie => {
             console.log('Movie Data:', movie);
+            console.log('Poster:', movie.poster.url);
             // 确保 movie 对象有必要的字段
             return {
               ...movie,
               title: movie.title || '未知电影',
               rating: movie.rating || 0,
               // 处理 poster 字段，支持不同的存储格式
-              poster: movie.poster ?
-                (typeof movie.poster === 'object' && movie.poster.url ?
-                  `${baseURL}${movie.poster.url}` :
-                  typeof movie.poster === 'object' && movie.poster.data ?
-                    `${baseURL}${movie.poster.data.attributes.url}` :
-                    `${baseURL}/api/upload/files/${movie.poster}`
-                ) :
-                'https://via.placeholder.com/300x400?text=No+Image'
+              poster: movie.poster
+                ? (typeof movie.poster === 'object' && movie.poster.url
+                  ? (movie.poster.url.startsWith('http')
+                    ? movie.poster.url
+                    : `${baseURL}${movie.poster.url}`)
+                  : typeof movie.poster === 'object' && movie.poster.data
+                    ? (movie.poster.data.url.startsWith('http')
+                      ? movie.poster.data.url
+                      : `${baseURL}${movie.poster.data.url}`)
+                    : `${baseURL}/api/upload/files/${movie.poster}`)
+                : 'https://via.placeholder.com/300x400?text=No+Image'
             };
           });
         }
@@ -53,14 +57,17 @@ const MovieApi = createApi({
             title: movie.title || '未知电影',
             rating: movie.rating || 0,
             // 处理 poster 字段，支持不同的存储格式
-            poster: movie.poster ?
-              (typeof movie.poster === 'object' && movie.poster.url ?
-                `${baseURL}${movie.poster.url}` :
-                typeof movie.poster === 'object' && movie.poster.data ?
-                  `${baseURL}${movie.poster.data.attributes.url}` :
-                  `${baseURL}/api/upload/files/${movie.poster}`
-              ) :
-              'https://via.placeholder.com/300x400?text=No+Image'
+            poster: movie.poster
+              ? (typeof movie.poster === 'object' && movie.poster.url
+                ? (movie.poster.url.startsWith('http')
+                  ? movie.poster.url
+                  : `${baseURL}${movie.poster.url}`)
+                : typeof movie.poster === 'object' && movie.poster.data
+                  ? (movie.poster.data.url.startsWith('http')
+                    ? movie.poster.data.url
+                    : `${baseURL}${movie.poster.data.url}`)
+                  : `${baseURL}/api/upload/files/${movie.poster}`)
+              : 'https://via.placeholder.com/300x400?text=No+Image'
           };
         }
       }),

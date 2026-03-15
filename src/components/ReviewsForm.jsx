@@ -113,7 +113,9 @@ const ReviewsForm = () => {
                     <div style={{
                       width: '100%',
                       maxWidth: '600px',
-                      whiteSpace: 'normal'//确保空白符正常处理，允许换行
+                      whiteSpace: 'normal',//确保空白符正常处理，允许换行
+                      wordBreak: 'break-all',
+                      overflowWrap: 'break-word',
                     }}>
                       {expandedComments[item.id] ? item.content : `${item.content.slice(0, 100)}...`}
                       <Button style={{

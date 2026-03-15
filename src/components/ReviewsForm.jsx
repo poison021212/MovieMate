@@ -16,7 +16,7 @@ const ReviewsForm = () => {
   const [submitting, setSubmitting] = useState(false);
   const auth = useSelector(state => state.auth)
   const navigate = useNavigate()
-
+  const [expandedComments, setExpandedComments] = useState({});
   console.log('reviews data:', reviews)
   // console.log('movie documentId:', id)
 
@@ -63,6 +63,8 @@ const ReviewsForm = () => {
     }
   }
 
+
+
   const delReviewHandler = async (id, username) => {
     if (!auth.isLogin) {
       message.error('请先登录后再删除评论');
@@ -105,8 +107,39 @@ const ReviewsForm = () => {
                     <span style={{ color: '#999' }}>{item.date || ''}</span>
                   </Space>
                 }
-                description={item.content || ''}
-
+                // 显示评论内容，字数过多时截断显示，点击查看更多，评论内容适配 List.Item 宽度
+                description={
+                  item.content?.length > 100 ? (
+                    <div style={{
+                      width: '100%',
+                      maxWidth: '600px',
+                      whiteSpace: 'normal'//确保空白符正常处理，允许换行
+                    }}>
+                      {expandedComments[item.id] ? item.content : `${item.content.slice(0, 100)}...`}
+                      <Button style={{
+                        color: '#1890ff',
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        marginLeft: '8px'
+                      }} size="small" onClick={() => setExpandedComments(prev => ({
+                        ...prev,
+                        [item.id]: !prev[item.id]
+                      }))}>
+                        {expandedComments[item.id] ? '收起' : '查看更多'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div style={{
+                      width: '100%',
+                      maxWidth: '600px',
+                      wordBreak: 'break-all',
+                      overflowWrap: 'break-word',
+                      whiteSpace: 'normal'
+                    }}>
+                      {item.content || ''}
+                    </div>
+                  )
+                }
               />
               <DeleteOutlined onClick={() => delReviewHandler(item.documentId, item.username)} />
             </List.Item>

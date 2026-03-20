@@ -35,9 +35,11 @@ const Layout = (props) => {
   }]
   return (
     <AntLayout>
-      <Header style={{ display: 'flex', alignItems: 'center' }}>
-        <div style={{ color: 'white', fontSize: 20, marginRight: 40 }}>光影笔记</div>
-        <Menu theme="dark" mode="horizontal" defaultSelectedKeys={[getSelectedKey()]} style={{ flex: 1 }}>
+      {/* flexWrap: 'wrap', gap: 8允许换行；minWidth: 0 防止溢出 */}
+      <Header style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ color: 'white', fontSize: 20, marginRight: 40, whiteSpace: 'nowrap' }}>光影笔记</div>
+        <Menu theme="dark" mode="horizontal" defaultSelectedKeys={[getSelectedKey()]} style={{ flex: 1, minWidth: 0 }}>
+          {/* <Menu.Item key="title" style={{ color: 'white', fontSize: 20, marginRight: 20 }}>光影笔记</Menu.Item> */}
           <Menu.Item key="home" icon={<HomeOutlined />}>
             <Link to="/">首页</Link>
           </Menu.Item>

@@ -5,6 +5,7 @@ import { Form, Input, message, Rate, List, Avatar, Divider, Space, Button } from
 import { UserOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from "react-redux";
+import { useLocation } from "react-router-dom";
 
 const { TextArea } = Input;
 const ReviewsForm = () => {
@@ -16,6 +17,7 @@ const ReviewsForm = () => {
   const [submitting, setSubmitting] = useState(false);
   const auth = useSelector(state => state.auth)
   const navigate = useNavigate()
+  const location = useLocation()
   const [expandedComments, setExpandedComments] = useState({});
   console.log('reviews data:', reviews)
   // console.log('movie documentId:', id)
@@ -34,7 +36,8 @@ const ReviewsForm = () => {
 
   const submitReview = async (values) => {
     if (!auth.isLogin) {
-      navigate('/auth');
+      message.error('请先登录后再发表评论');
+      navigate('/auth', { state: { from: location } });
       return;
     }
 
@@ -68,7 +71,7 @@ const ReviewsForm = () => {
   const delReviewHandler = async (id, username) => {
     if (!auth.isLogin) {
       message.error('请先登录后再删除评论');
-      navigate('/auth');
+      navigate('/auth', { state: { from: location } });
       return;
     }
     try {

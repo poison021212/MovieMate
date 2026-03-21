@@ -1,7 +1,7 @@
 import { useGetReviewQuery, useAddReviewMutation, useDelReviewMutation } from "../store/API/reviewApi";
 import { useParams } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { Form, Input, message, Rate, List, Avatar, Divider, Space, Button } from 'antd';
+import { Form, Input, message, Rate, List, Avatar, Divider, Space, Button, Modal } from 'antd';
 import { UserOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from "react-redux";
@@ -80,12 +80,23 @@ const ReviewsForm = () => {
         message.error('只能删除自己的评论');
         return;
       }
-      await delReview(id, username).unwrap();
-      message.success('评论删除成功');
-      refetch();
-    } catch (error) {
-      console.error('删除评论失败:', error);
-      message.error('删除评论失败');
+      Modal.confirm({
+        title: "确认删除吗？",
+        content: "删除后不可恢复",
+        cancelText: "取消",
+        okText: "确定",
+        onOk: async () => {
+          try {
+            await delReview(id, username).unwrap();
+            message.success('评论删除成功');
+            refetch();
+          } catch (error) {
+            message.error('删除评论失败');
+            throw error;
+          }
+        }
+      })
+      // await delReview(id, username).unwrap();
     }
   }
 

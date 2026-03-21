@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Row, Col, Image, Descriptions, Divider, Button, Space, Typography } from 'antd';
 import { HeartOutlined, HeartFilled, DownOutlined, UpOutlined } from '@ant-design/icons';
 import { useState } from 'react';
@@ -20,6 +20,7 @@ function MovieDetail() {
   const [showFullCast, setShowFullCast] = useState(false); // 控制演员列表的显示状态
 
   const navigate = useNavigate();
+  const location = useLocation();
 
   if (isLoading) {
     return <div style={{ padding: 50, textAlign: 'center' }}>加载中...</div>;
@@ -38,7 +39,7 @@ function MovieDetail() {
 
   const handleToggleFavorite = async () => {
     if (!auth.isLogin) {
-      navigate('/auth');
+      navigate('/auth', { state: { from: location } });
       return;
     }
 

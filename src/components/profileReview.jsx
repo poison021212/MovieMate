@@ -43,14 +43,13 @@ const profileReview = () => {
             expanded,
             onExpand: (_, info) => setExpanded(info.expanded),
           }}
-          copyable={{
-            tooltips: ['点击复制', '复制成功']
-          }}
         >
           {/* 评论内容, 评论时间 */}
           {reviewsArr.length !== 0 ? reviewsArr.map(item => (
             <div key={item.id} onClick={() => onClickHander(item)} style={{ borderBottom: '1px solid #e8e8e8', padding: '12px 0' }}>
-              <Typography.Text>{item.content}</Typography.Text>
+              <Typography.Text copyable={{
+                tooltips: ['点击复制', '复制成功']
+              }}>{item.content}</Typography.Text>
               <Typography.Text style={{ color: '#999' }}>{item.date || ''}</Typography.Text>
             </div>
           )) :

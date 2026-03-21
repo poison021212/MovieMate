@@ -8,6 +8,7 @@ import Layout from '@/components/Layout'
 import AuthFormPage from '@/pages/AuthFormPage'
 import useAutoLogout from '@/hooks/useAutoLogout'
 import ProfileReviewPage from '@/pages/ProfileReviewPage'
+import NeedAuth from '@/components/NeedAuth'
 
 function App() {
   useAutoLogout()
@@ -16,9 +17,9 @@ function App() {
       <Routes>
         <Route path="/" element={<MoviePage />} />
         <Route path="/movie/:id" element={<MovieDetail />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile" element={<NeedAuth><ProfilePage /></NeedAuth>} />
         <Route path="/auth" element={<AuthFormPage />} />
-        <Route path="/profile-review" element={<ProfileReviewPage />} />
+        <Route path="/profile-review" element={<NeedAuth><ProfileReviewPage /></NeedAuth>} />
       </Routes>
     </Layout>
   )

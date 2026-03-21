@@ -97,6 +97,11 @@ const ReviewsForm = () => {
         }
       })
       // await delReview(id, username).unwrap();
+
+
+    } catch (error) {
+      console.error('删除评论失败:', error);
+      message.error('删除评论失败');
     }
   }
 

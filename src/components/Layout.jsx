@@ -19,6 +19,7 @@ const Layout = (props) => {
     if (path === '/profile-review') return 'profile-review'
     if (path === '/auth') return 'auth'
     if (path === '/movie/:id') return 'movie/:id'
+    if (path === '/ai-recommend') return 'ai-recommend'
   }
   const items = [{
     key: 'profile',
@@ -52,6 +53,9 @@ const Layout = (props) => {
         <Menu theme="dark" mode="horizontal" defaultSelectedKeys={[getSelectedKey()]} style={{ flex: 1, minWidth: 0 }}>
           <Menu.Item key="home" icon={<HomeOutlined />}>
             <Link to="/">首页</Link>
+          </Menu.Item>
+          <Menu.Item key="ai-recommend" icon={<HeartOutlined />}>
+            <Link to="/ai-recommend">AI推荐</Link>
           </Menu.Item>
           {!auth.isLogin && (
             <Menu.Item key="auth" icon={<UserOutlined />} style={{ marginLeft: 'auto' }}>

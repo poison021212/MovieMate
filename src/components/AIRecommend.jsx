@@ -5,6 +5,20 @@ import { useNavigate } from 'react-router-dom';
 
 const { TextArea } = Input;
 
+// 辅助函数：从字符串中提取 JSON 数组
+const extractJSON = (str) => {
+  // 尝试去除可能的 markdown 代码块标记
+  let cleaned = str.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
+  // 匹配第一个完整的 JSON 数组（包括嵌套对象）
+  const match = cleaned.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+  if (match) {
+    return match[0];
+  }
+  // 如果没找到数组，尝试匹配整个字符串中第一个 { ... } 或 [ ... ]
+  const fallbackMatch = cleaned.match(/\[[\s\S]*\]/);
+  return fallbackMatch ? fallbackMatch[0] : cleaned;
+};
+
 const AIRecommend = () => {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,7 +45,6 @@ const AIRecommend = () => {
         throw new Error(`请求失败：${response.status}`);
       }
 
-      // 处理流式响应
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullContent = '';
@@ -41,13 +54,11 @@ const AIRecommend = () => {
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-        // 通义千问 SSE 格式：data: {...}\n\n
         const lines = chunk.split('\n');
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const data = line.slice(6);
             if (data === '[DONE]') continue;
-
             try {
               const parsed = JSON.parse(data);
               const content = parsed.choices[0]?.delta?.content || '';
@@ -59,17 +70,20 @@ const AIRecommend = () => {
         }
       }
 
-      // 流结束，尝试解析 JSON 数组
+      // 流结束，清洗并提取 JSON 数组
+      const jsonString = extractJSON(fullContent);
       try {
-        const result = JSON.parse(fullContent);
+        const result = JSON.parse(jsonString);
         if (Array.isArray(result)) {
           setMovies(result);
         } else {
-          message.error('AI 返回数据格式不正确');
+          message.error('AI 返回的数据不是数组');
+          console.error('非数组数据:', result);
         }
-      } catch (e) {
-        console.error('解析 JSON 失败', fullContent);
-        message.error('AI 返回内容格式错误，请重试');
+      } catch (parseError) {
+        console.error('解析 JSON 失败，原始内容:', fullContent);
+        console.error('提取的 JSON 字符串:', jsonString);
+        message.error('AI 返回格式错误，请稍后重试');
       }
     } catch (err) {
       message.error(err.message);
@@ -83,12 +97,12 @@ const AIRecommend = () => {
       <h2>AI 电影推荐</h2>
       <TextArea
         rows={3}
-        placeholder='例如：推荐几部好看的悬疑片'
+        placeholder="例如：推荐几部好看的悬疑片"
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
       />
       <Button
-        type='primary'
+        type="primary"
         onClick={handleRecommend}
         loading={loading}
         style={{ marginTop: 16 }}
@@ -109,9 +123,9 @@ const AIRecommend = () => {
                 style={{ width: 300 }}
                 extra={
                   <Button
-                    type='link'
+                    type="link"
                     onClick={() => {
-                      // 跳转到电影详情页（需要你根据现有路由调整）
+                      // 根据你的实际路由调整跳转路径
                       navigate(`/movie/${encodeURIComponent(movie.title)}`);
                     }}
                   >

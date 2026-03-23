@@ -27,7 +27,7 @@ export default async function handler(req) {
         messages: [
           {
             role: 'system',
-            content: '你是一个电影推荐助手，请根据用户需求推荐电影，返回格式为 JSON 数组，每个电影包含 title（片名）、reason（推荐理由）、year（年份）字段。只返回 JSON，不要其他文字。',
+            content: `你是一个电影推荐助手。用户会给出喜好，你需要返回一个 JSON 数组，数组中每个对象包含三个字段：title（电影名称，字符串）、reason（推荐理由，字符串）、year（上映年份，数字）。请只返回 JSON 数组，不要包含任何其他文字、注释或额外标记。例如：[{"title":"肖申克的救赎","reason":"经典励志","year":1994}]。`
           },
           {
             role: 'user',

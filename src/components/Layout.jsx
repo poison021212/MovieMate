@@ -1,6 +1,6 @@
 import React from 'react'
 import { Layout as AntLayout, Menu, Dropdown, Space, Modal } from 'antd';
-import { HomeOutlined, HeartOutlined, UserOutlined, LogoutOutlined, MessageOutlined, DownOutlined } from '@ant-design/icons';
+import { HomeOutlined, HeartOutlined, UserOutlined, LogoutOutlined, MessageOutlined, DownOutlined, OpenAIOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux';
 import { useLocation } from 'react-router-dom';
@@ -54,7 +54,7 @@ const Layout = (props) => {
           <Menu.Item key="home" icon={<HomeOutlined />}>
             <Link to="/">首页</Link>
           </Menu.Item>
-          <Menu.Item key="ai-recommend" icon={<HeartOutlined />}>
+          <Menu.Item key="ai-recommend" icon={<OpenAIOutlined />}>
             <Link to="/ai-recommend">AI推荐</Link>
           </Menu.Item>
           {!auth.isLogin && (

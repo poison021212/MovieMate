@@ -14,9 +14,10 @@ export default async function handler(req) {
 
   try {
     const { prompt } = await req.json();
-
+    const currentYear = new Date().getFullYear();
+    const systemPrompt = `当前年份是 ${currentYear}。用户需求：${prompt}。请推荐符合需求的电影，优先选择 ${currentYear - 1} 年至 ${currentYear} 年上映或热播的作品。返回 JSON 数组，每个对象包含 title、reason、year（年份）。`;
     // 严格的系统提示，要求只返回 JSON 数组
-    const systemPrompt = `你是一个电影推荐助手。用户会给出喜好，你需要返回一个 JSON 数组，数组中每个对象包含三个字段：title（电影名称，字符串）、reason（推荐理由，字符串）、year（上映年份，数字）。请只返回 JSON 数组，不要包含任何其他文字、注释或额外标记。例如：[{"title":"肖申克的救赎","reason":"经典励志","year":1994}]`;
+    // const systemPrompt = `你是一个电影推荐助手。用户会给出喜好，你需要返回一个 JSON 数组，数组中每个对象包含三个字段：title（电影名称，字符串）、reason（推荐理由，字符串）、year（上映年份，数字）。请只返回 JSON 数组，不要包含任何其他文字、注释或额外标记。例如：[{"title":"肖申克的救赎","reason":"经典励志","year":1994}]`;
 
     const response = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
       method: 'POST',

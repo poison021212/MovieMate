@@ -9,6 +9,7 @@ import AuthFormPage from '@/pages/AuthFormPage'
 import useAutoLogout from '@/hooks/useAutoLogout'
 import ProfileReviewPage from '@/pages/ProfileReviewPage'
 import NeedAuth from '@/components/NeedAuth'
+import AIRecommend from '@/components/AIRecommend'
 
 function App() {
   useAutoLogout()
@@ -20,6 +21,7 @@ function App() {
         <Route path="/profile" element={<NeedAuth><ProfilePage /></NeedAuth>} />
         <Route path="/auth" element={<AuthFormPage />} />
         <Route path="/profile-review" element={<NeedAuth><ProfileReviewPage /></NeedAuth>} />
+        <Route path="/ai-recommend" element={<AIRecommend />} />
       </Routes>
     </Layout>
   )

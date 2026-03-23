@@ -58,22 +58,26 @@ const AIRecommend = () => {
         throw new Error(result.error || '请求失败');
       }
 
-      let moviesData = result.data;
-      // 如果后端未成功解析，再尝试用前端修复函数处理
-      if (!moviesData && result.rawContent) {
-        moviesData = extractAndFixJSON(result.rawContent);
-      }
-
-      if (moviesData && Array.isArray(moviesData)) {
-        setMovies(moviesData);
+      if (result.movies && Array.isArray(result.movies)) {
+        setMovies(result.movies);
       } else {
         message.error('AI 返回格式错误，请稍后重试');
-        console.error('无效数据:', result);
       }
     } catch (err) {
       message.error(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 查看详情 - 使用 TMDB ID 或标题跳转
+  const handleViewDetail = (movie) => {
+    if (movie.id) {
+      // 如果有 TMDB ID，可以跳转到你项目的详情页（需要你实现根据外部ID查询）
+      // 或者直接打开 TMDB 页面
+      window.open(`https://www.themoviedb.org/movie/${movie.id}`, '_blank');
+    } else {
+      message.warning('暂无详情页，敬请期待');
     }
   };
 
@@ -109,25 +113,22 @@ const AIRecommend = () => {
                 extra={
                   <Button
                     type="link"
-                    onClick={() => {
-                      // 根据你的实际路由调整跳转路径
-                      navigate(`/movie/${encodeURIComponent(movie.title)}`);
-                    }}
+                    onClick={() => handleViewDetail(movie)}
                   >
                     查看详情
                   </Button>
                 }
               >
-                <p>
-                  <strong>年份：</strong>
-                  {movie.year}
-                </p>
-                <p>
-                  <strong>推荐理由：</strong>
-                  {movie.reason}
-                </p>
+                <p><strong>年份：</strong>{movie.year}</p>
+                <p><strong>推荐理由：</strong>{movie.reason}</p>
+                {movie.vote_average && (
+                  <p><strong>TMDB 评分：</strong>{movie.vote_average}/10</p>
+                )}
               </Card>
             ))}
+          </div>
+          <div style={{ marginTop: 16, fontSize: 12, color: '#888' }}>
+            数据来源：TMDB 热门电影榜
           </div>
         </div>
       )}

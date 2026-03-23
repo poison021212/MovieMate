@@ -5,18 +5,29 @@ import { useNavigate } from 'react-router-dom';
 
 const { TextArea } = Input;
 
-// 辅助函数：从字符串中提取 JSON 数组
-const extractJSON = (str) => {
-  // 尝试去除可能的 markdown 代码块标记
-  let cleaned = str.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
-  // 匹配第一个完整的 JSON 数组（包括嵌套对象）
-  const match = cleaned.match(/\[\s*\{[\s\S]*?\}\s*\]/);
-  if (match) {
-    return match[0];
+// 辅助函数：从字符串中提取并修复 JSON 数组
+const extractAndFixJSON = (str) => {
+  // 1. 提取第一个数组部分
+  let arrayStr = str.match(/\[\s*\{[\s\S]*\}\s*\]/)?.[0] || str.match(/\[[\s\S]*\]/)?.[0];
+  if (!arrayStr) return null;
+
+  // 2. 修复缺失引号的键名：{title: "abc"} -> {"title": "abc"}
+  arrayStr = arrayStr.replace(/([{,]\s*)([a-zA-Z0-9_\u4e00-\u9fa5]+)(\s*:)/g, '$1"$2"$3');
+
+  // 3. 修复缺失逗号： "a":"b""c":"d" -> "a":"b","c":"d"
+  arrayStr = arrayStr.replace(/("\s*:\s*"[^"]*")\s*(")/g, '$1,$2');
+
+  arrayStr = arrayStr.replace(/\}\s*\{/g, '},{');
+
+  // 5. 移除尾随逗号
+  arrayStr = arrayStr.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+
+  try {
+    return JSON.parse(arrayStr);
+  } catch (e) {
+    console.error('修复后仍无法解析:', arrayStr);
+    return null;
   }
-  // 如果没找到数组，尝试匹配整个字符串中第一个 { ... } 或 [ ... ]
-  const fallbackMatch = cleaned.match(/\[[\s\S]*\]/);
-  return fallbackMatch ? fallbackMatch[0] : cleaned;
 };
 
 const AIRecommend = () => {
@@ -41,49 +52,23 @@ const AIRecommend = () => {
         body: JSON.stringify({ prompt }),
       });
 
-      if (!response.ok) {
-        throw new Error(`请求失败：${response.status}`);
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || '请求失败');
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let fullContent = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices[0]?.delta?.content || '';
-              fullContent += content;
-            } catch (e) {
-              // 忽略解析错误（可能是部分数据）
-            }
-          }
-        }
+      let moviesData = result.data;
+      // 如果后端未成功解析，再尝试用前端修复函数处理
+      if (!moviesData && result.rawContent) {
+        moviesData = extractAndFixJSON(result.rawContent);
       }
 
-      // 流结束，清洗并提取 JSON 数组
-      const jsonString = extractJSON(fullContent);
-      try {
-        const result = JSON.parse(jsonString);
-        if (Array.isArray(result)) {
-          setMovies(result);
-        } else {
-          message.error('AI 返回的数据不是数组');
-          console.error('非数组数据:', result);
-        }
-      } catch (parseError) {
-        console.error('解析 JSON 失败，原始内容:', fullContent);
-        console.error('提取的 JSON 字符串:', jsonString);
+      if (moviesData && Array.isArray(moviesData)) {
+        setMovies(moviesData);
+      } else {
         message.error('AI 返回格式错误，请稍后重试');
+        console.error('无效数据:', result);
       }
     } catch (err) {
       message.error(err.message);

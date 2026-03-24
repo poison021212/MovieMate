@@ -7,6 +7,7 @@ import authApi from '@/store/API/authApi'
 import { reviewSlice } from '@/store/Slice/reviewSlice'
 import reviewApi from '@/store/API/reviewApi'
 import favoriteApi from '@/store/API/favoriteApi'
+import vercelApi from '@/store/API/vercelApi'
 
 const store = configureStore({
   reducer: {
@@ -14,11 +15,12 @@ const store = configureStore({
     [authApi.reducerPath]: authApi.reducer,
     [reviewApi.reducerPath]: reviewApi.reducer,
     [favoriteApi.reducerPath]: favoriteApi.reducer,
+    [vercelApi.reducerPath]: vercelApi.reducer,
     favorite: favoriteSlice.reducer,
     auth: authSlice.reducer,
     review: reviewSlice.reducer,
   },
-  middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(MovieApi.middleware, authApi.middleware, reviewApi.middleware, favoriteApi.middleware),
+  middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(MovieApi.middleware, authApi.middleware, reviewApi.middleware, favoriteApi.middleware, vercelApi.middleware),
 
 })
 setupListeners(store.dispatch)

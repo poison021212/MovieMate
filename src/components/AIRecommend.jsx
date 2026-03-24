@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Input, Button, Spin, message, Card } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { useRecommendMoviesMutation } from '@/store/API/MovieApi';
+import { useRecommendMoviesMutation } from '@/store/API/vercelApi';
 
 const { TextArea } = Input;
 

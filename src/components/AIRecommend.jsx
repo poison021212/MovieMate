@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Input, Button, Spin, message, Card } from 'antd';
 import { useNavigate } from 'react-router-dom';
+import { useRecommendMoviesMutation } from '@/store/API/MovieApi';
 
 const { TextArea } = Input;
 
@@ -32,8 +33,8 @@ const extractAndFixJSON = (str) => {
 
 const AIRecommend = () => {
   const [prompt, setPrompt] = useState('');
-  const [loading, setLoading] = useState(false);
   const [movies, setMovies] = useState([]);
+  const [recommend, { isLoading, error }] = useRecommendMoviesMutation();
   const navigate = useNavigate();
 
   const handleRecommend = async () => {
@@ -41,32 +42,19 @@ const AIRecommend = () => {
       message.warning('请输入你的电影偏好');
       return;
     }
-
-    setLoading(true);
-    setMovies([]);
-
     try {
-      const response = await fetch('/api/recommend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
-      });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || '请求失败');
-      }
+      //unwrap()方法用于将异步操作的结果转换为同步操作的结果，
+      // 它会阻塞当前线程，直到异步操作完成，然后返回结果。
+      // 如果异步操作失败，unwrap()方法会抛出异常。
+      const result = await recommend(prompt).unwrap();
 
       if (result.movies && Array.isArray(result.movies)) {
         setMovies(result.movies);
       } else {
-        message.error('AI 返回格式错误，请稍后重试');
+        message.error(result.error || '推荐失败');
       }
     } catch (err) {
-      message.error(err.message);
-    } finally {
-      setLoading(false);
+      message.error(err.message || '请求失败');
     }
   };
 
@@ -75,7 +63,7 @@ const AIRecommend = () => {
     if (movie.id) {
       // 如果有 TMDB ID，可以跳转到你项目的详情页（需要你实现根据外部ID查询）
       // 或者直接打开 TMDB 页面
-      window.open(`https://www.themoviedb.org/movie/${movie.id}`, '_blank');
+      navigate(`https://www.themoviedb.org/movie/${movie.id}`, { replace: false });
     } else {
       message.warning('暂无详情页，敬请期待');
     }
@@ -93,13 +81,13 @@ const AIRecommend = () => {
       <Button
         type="primary"
         onClick={handleRecommend}
-        loading={loading}
+        loading={isLoading}
         style={{ marginTop: 16 }}
       >
         获取推荐
       </Button>
 
-      {loading && <Spin style={{ marginTop: 24 }} />}
+      {isLoading && <Spin style={{ marginTop: 24 }} />}
 
       {movies.length > 0 && (
         <div style={{ marginTop: 24 }}>

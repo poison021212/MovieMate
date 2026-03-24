@@ -71,6 +71,15 @@ const MovieApi = createApi({
           };
         }
       }),
+      recommendMovies: builder.mutation({
+        query: (prompt) => ({
+          url: '/api/recommend',
+          method: 'POST',
+          body: { prompt },
+        }),
+        // 这个 mutation 的结果不需要缓存，因为每次 prompt 不同
+        keepUnusedDataFor: 0,
+      }),
       // 添加获取上传文件的端点
       getUploadFile: builder.query({
         query: (id) => `upload/files/${id}`
@@ -79,5 +88,5 @@ const MovieApi = createApi({
   }
 })
 
-export const { useGetMoviesQuery, useGetMoviesByIdQuery, useGetUploadFileQuery } = MovieApi
+export const { useGetMoviesQuery, useGetMoviesByIdQuery, useGetUploadFileQuery, useRecommendMoviesMutation } = MovieApi
 export default MovieApi

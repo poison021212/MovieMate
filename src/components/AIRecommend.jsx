@@ -1,41 +1,13 @@
 // src/pages/AIRecommend.jsx
 import { useState } from 'react';
 import { Input, Button, Spin, message, Card } from 'antd';
-import { useNavigate } from 'react-router-dom';
 import { useRecommendMoviesMutation } from '@/store/API/vercelApi';
 
 const { TextArea } = Input;
-
-// 辅助函数：从字符串中提取并修复 JSON 数组
-const extractAndFixJSON = (str) => {
-  // 1. 提取第一个数组部分
-  let arrayStr = str.match(/\[\s*\{[\s\S]*\}\s*\]/)?.[0] || str.match(/\[[\s\S]*\]/)?.[0];
-  if (!arrayStr) return null;
-
-  // 2. 修复缺失引号的键名：{title: "abc"} -> {"title": "abc"}
-  arrayStr = arrayStr.replace(/([{,]\s*)([a-zA-Z0-9_\u4e00-\u9fa5]+)(\s*:)/g, '$1"$2"$3');
-
-  // 3. 修复缺失逗号： "a":"b""c":"d" -> "a":"b","c":"d"
-  arrayStr = arrayStr.replace(/("\s*:\s*"[^"]*")\s*(")/g, '$1,$2');
-
-  arrayStr = arrayStr.replace(/\}\s*\{/g, '},{');
-
-  // 5. 移除尾随逗号
-  arrayStr = arrayStr.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
-
-  try {
-    return JSON.parse(arrayStr);
-  } catch (e) {
-    console.error('修复后仍无法解析:', arrayStr);
-    return null;
-  }
-};
-
 const AIRecommend = () => {
   const [prompt, setPrompt] = useState('');
   const [movies, setMovies] = useState([]);
   const [recommend, { isLoading, error }] = useRecommendMoviesMutation();
-  const navigate = useNavigate();
 
   const handleRecommend = async () => {
     if (!prompt.trim()) {
@@ -62,8 +34,8 @@ const AIRecommend = () => {
   const handleViewDetail = (movie) => {
     if (movie.id) {
       // 如果有 TMDB ID，可以跳转到你项目的详情页（需要你实现根据外部ID查询）
-      // 或者直接打开 TMDB 页面
-      navigate(`https://www.themoviedb.org/movie/${movie.id}`, { replace: false });
+      // 或者直接打开 TMDB 页面,navigate只能内部跳转，不能打开外部链接，所以使用window.open打开
+      window.open(`https://www.themoviedb.org/movie/${movie.id}`, '_blank');
     } else {
       message.warning('暂无详情页，敬请期待');
     }

@@ -59,7 +59,7 @@ const AIRecommend = () => {
         获取推荐
       </Button>
 
-      {isLoading && <Spin style={{ marginTop: 24 }} />}
+      {isLoading && <Spin style={{ marginTop: 26 }} />}
 
       {movies.length > 0 && (
         <div style={{ marginTop: 24 }}>

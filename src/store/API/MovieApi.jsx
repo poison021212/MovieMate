@@ -73,7 +73,7 @@ const MovieApi = createApi({
       }),
       recommendMovies: builder.mutation({
         query: (prompt) => ({
-          url: '/api/recommend',
+          url: 'recommend',
           method: 'POST',
           body: { prompt },
         }),

@@ -35,7 +35,11 @@ const AIRecommend = () => {
     if (movie.id) {
       // 如果有 TMDB ID，可以跳转到你项目的详情页（需要你实现根据外部ID查询）
       // 或者直接打开 TMDB 页面,navigate只能内部跳转，不能打开外部链接，所以使用window.open打开
-      window.open(`https://www.themoviedb.org/movie/${movie.id}`, '_blank');
+      // 直接跳转到 TMDB 页面，使用 target="_blank" 避免弹出窗口阻止
+      const url = `https://www.themoviedb.org/movie/${movie.id}`;
+      window.open(url, '_blank');
+    } else if (movie.title) {
+      window.open(`https://www.themoviedb.org/search?query=${encodeURIComponent(movie.title)}`, '_blank');
     } else {
       message.warning('暂无详情页，敬请期待');
     }

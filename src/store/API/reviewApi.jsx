@@ -3,7 +3,16 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 
 const reviewApi = createApi({
   reducerPath: 'reviewApi',
-  baseQuery: fetchBaseQuery({ baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:1337/api' }),
+  baseQuery: fetchBaseQuery({
+    baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:1337/api',
+    prepareHeaders: (headers) => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+      return headers;
+    },
+  }),
   endpoints(builder) {
     return {
       addReview: builder.mutation({

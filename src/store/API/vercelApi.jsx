@@ -2,7 +2,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 
 const vercelApi = createApi({
   reducerPath: 'vercelApi',
-  baseQuery: fetchBaseQuery({ baseUrl: '/' }),
+  baseQuery: fetchBaseQuery({ baseUrl: import.meta.env.VITE_API_URL || '/' }),
   endpoints: (builder) => ({
     recommendMovies: builder.mutation({
       query: (prompt) => ({

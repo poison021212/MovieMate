@@ -36,7 +36,7 @@ const MovieApi = createApi({
                     ? (movie.poster.data.url.startsWith('http')
                       ? movie.poster.data.url
                       : `${baseURL}${movie.poster.data.url}`)
-                    : `${baseURL}/api/upload/files/${movie.poster}`)
+                    : `${baseURL}${movie.poster}`)
                 : 'https://via.placeholder.com/300x400?text=No+Image'
             };
           });
@@ -66,7 +66,7 @@ const MovieApi = createApi({
                   ? (movie.poster.data.url.startsWith('http')
                     ? movie.poster.data.url
                     : `${baseURL}${movie.poster.data.url}`)
-                  : `${baseURL}/api/upload/files/${movie.poster}`)
+                  : `${baseURL}${movie.poster}`)
               : 'https://via.placeholder.com/300x400?text=No+Image'
           };
         }
@@ -74,7 +74,7 @@ const MovieApi = createApi({
 
       // 添加获取上传文件的端点
       getUploadFile: builder.query({
-        query: (id) => `upload/files/${id}`
+        query: (id) => `${id}`
       })
     }
   }

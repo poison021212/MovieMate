@@ -1,6 +1,6 @@
 import React from 'react'
 import { Layout as AntLayout, Menu, Dropdown, Space, Modal } from 'antd';
-import { HomeOutlined, HeartOutlined, UserOutlined, LogoutOutlined, MessageOutlined, DownOutlined, OpenAIOutlined } from '@ant-design/icons';
+import { HomeOutlined, HeartOutlined, UserOutlined, LogoutOutlined, MessageOutlined, DownOutlined, OpenAIOutlined, SwapOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux';
 import { useLocation } from 'react-router-dom';
@@ -48,11 +48,14 @@ const Layout = (props) => {
     <AntLayout>
       {/* flexWrap: 'wrap', gap: 8允许换行；minWidth: 0 防止溢出 */}
       {/*  fontSize: 'clamp(14px, 3vw, 20px)'响应式字体*/}
-      <Header style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+      <Header style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000, }}>
         <div style={{ color: 'white', fontSize: 20, marginRight: 40, whiteSpace: 'nowrap' }}>光影笔记</div>
         <Menu theme="dark" mode="horizontal" defaultSelectedKeys={[getSelectedKey()]} style={{ flex: 1, minWidth: 0 }}>
           <Menu.Item key="home" icon={<HomeOutlined />}>
             <Link to="/">首页</Link>
+          </Menu.Item>
+          <Menu.Item key="swipe" icon={<SwapOutlined />}>
+            <Link to="/swipe">速览模式</Link>
           </Menu.Item>
           <Menu.Item key="ai-recommend" icon={<OpenAIOutlined />}>
             <Link to="/ai-recommend">AI推荐</Link>
@@ -83,7 +86,7 @@ const Layout = (props) => {
             </>}
         </Menu>
       </Header>
-      <Content style={{ minHeight: 'calc(100vh - 64px)' }}>
+      <Content style={{ minHeight: '100vh', paddingTop: 55 }}>
         {props.children}
       </Content>
     </AntLayout>

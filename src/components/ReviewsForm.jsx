@@ -32,7 +32,8 @@ const ReviewsForm = () => {
 
   // 正确处理数据结构，并根据 movieId 与 documentId 进行匹配
   const reviewArray = reviews?.data || [];
-  const filteredReviews = reviewArray.filter(review => review.movieId === id);
+  const movieIdNum = Number(id);
+  const filteredReviews = reviewArray.filter(review => review.movieId === movieIdNum);
 
   const submitReview = async (values) => {
     if (!auth.isLogin) {
@@ -46,8 +47,11 @@ const ReviewsForm = () => {
       // 调整数据结构以符合后端 API 要求
       const reviewData = {
         data: {
-          movieId: id,
-          username: values.username,
+          // 转换为数字型与后端匹配
+          movieId: Number(id),
+          // username: values.username,//strapi需要username字段
+          // username: values.username,//node.js不需要username字段
+          // 由后端自动生成
           date: values.date,
           rating: values.rating,
           content: values.content
@@ -97,7 +101,6 @@ const ReviewsForm = () => {
         }
       })
       // await delReview(id, username).unwrap();
-
 
     } catch (error) {
       console.error('删除评论失败:', error);

@@ -10,6 +10,7 @@ import useAutoLogout from '@/hooks/useAutoLogout'
 import ProfileReviewPage from '@/pages/ProfileReviewPage'
 import NeedAuth from '@/components/NeedAuth'
 import AIRecommend from '@/components/AIRecommend'
+import MovieSwipePage from '@/pages/MovieSwipePage'
 
 function App() {
   useAutoLogout()
@@ -17,6 +18,7 @@ function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<MoviePage />} />
+        <Route path="/swipe" element={<MovieSwipePage />} />
         <Route path="/movie/:id" element={<MovieDetail />} />
         <Route path="/profile" element={<NeedAuth><ProfilePage /></NeedAuth>} />
         <Route path="/auth" element={<AuthFormPage />} />

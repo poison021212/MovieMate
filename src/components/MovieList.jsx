@@ -33,7 +33,7 @@ const MovieList = () => {
     console.log(value)
   };
   if (isLoading) {
-    return <div>加载中...</div>
+    return <div style={{ textAlign: 'center', padding: 60 }}>加载中...</div>
   }
 
   if (error) {

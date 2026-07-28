@@ -1,12 +1,12 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Row, Col, Image, Descriptions, Divider, Button, Space, Typography } from 'antd';
+import { Row, Col, Image, Descriptions, Divider, Button, Space, Typography, message } from 'antd';
 import { HeartOutlined, HeartFilled, DownOutlined, UpOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { useGetMoviesByIdQuery } from '@/store/API/MovieApi';
 import { useSelector, useDispatch } from 'react-redux';
 import { addFavorite, removeFavorite } from '../store/Slice/favoriteSlice';
 import ReviewsForm from './ReviewsForm';
-import { useCheckFavoriteQuery, useGetFavoriteQuery, useAddFavoriteMutation, useDelFavoriteMutation } from '../store/API/favoriteApi';
+import { useGetFavoriteQuery, useAddFavoriteMutation, useDelFavoriteMutation } from '@/store/API/favoriteApi';
 
 const { Text } = Typography;
 
@@ -32,13 +32,17 @@ function MovieDetail() {
 
   // 从后台收藏数据中判断当前电影是否已收藏，只考虑当前用户的收藏
   const favoriteArray = Array.isArray(favorite?.data) ? favorite.data.filter(item => item.username === auth.userInfo?.username) : [];
-  const favoriteItem = favoriteArray.find(item => item.movieId === id);
+  //  因为id是从params中获取的,字符串类型，而item.movieId是从后端获取的数字类型，所以需要转换为数字，使得比较结果为true
+  const movieIdNum = Number(id);
+  const favoriteItem = favoriteArray.find(item => item.movieId === movieIdNum);
   //  const isFavorite = !!favoriteItem;表示如果favoriteItem存在，则isFavorite为true，否则为false
   const isFavorite = !!favoriteItem;
   console.log('1111', isFavorite, favorite, auth.userInfo)
 
   const handleToggleFavorite = async () => {
+    console.log('点击收藏，当前auth:', auth)
     if (!auth.isLogin) {
+      message.error('请先登录后再收藏')
       navigate('/auth', { state: { from: location } });
       return;
     }
@@ -51,7 +55,7 @@ function MovieDetail() {
         }
       } else {
         // 添加收藏，传递电影 ID 和用户名
-        await addFavorite({ movieId: id, username: auth.userInfo?.username }).unwrap();
+        await addFavorite({ movieId: Number(id), username: auth.userInfo?.username }).unwrap();
       }
     } catch (error) {
       console.error('操作收藏失败:', error);

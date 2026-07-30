@@ -1,0 +1,107 @@
+/* MovieSwipe.css */
+.swipe-container {
+  position: relative;
+  height: calc(100vh - 55px);
+  /* 减去导航栏高度 */
+  overflow: hidden;
+  /* 与导航栏高度一致 */
+  left: 0;
+  right: 0;
+  background: #000000;
+  /* 设置背景色为黑色，避免白栏 */
+}
+
+.swipe-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.3s ease;
+  will-change: transform;
+}
+
+.swipe-card.active {
+  z-index: 1;
+}
+
+.card-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background: #000000;
+  color: white;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.card-content img {
+  height: 50%;
+  object-fit: cover;
+  vertical-align: middle;
+}
+
+.card-content .button-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  margin: 20px 0;
+  width: 100%;
+}
+
+.card-content .title {
+  font-size: 24px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.card-content .summary {
+  margin: 0 auto 20px;
+  width: 90%;
+  max-width: 800px;
+  line-height: 1.5;
+  text-align: justify;
+  text-indent: 2em;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-content button {
+  padding: 5px 15px;
+  font-size: 12px;
+  background-color: #1890ff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.card-content button:hover {
+  background-color: #40a9ff;
+}
+
+.icons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 30px;
+  margin-top: 20px;
+}
+
+.icon-item {
+  font-size: 24px;
+  transition: all 0.3s ease;
+}
+
+.icon-item:hover {
+  transform: scale(1.1);
+}

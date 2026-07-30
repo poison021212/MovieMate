@@ -1,0 +1,27 @@
+/* Global styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  /* 全局字体 */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  /* webkit指的是webkit浏览器的字体平滑处理 */
+  -webkit-font-smoothing: antialiased;
+  /* -moz-osx指的是Firefox浏览器的字体平滑处理 */
+  -moz-osx-font-smoothing: grayscale;
+  padding: 0;
+  margin: 0;
+  /* 隐藏水平滚动条 */
+  overflow-x: hidden;
+}
+
+/* 代码字体 */
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}

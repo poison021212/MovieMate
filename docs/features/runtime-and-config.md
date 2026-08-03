@@ -19,13 +19,32 @@ MovieMate-master/
 └── package.json     # npm workspaces
 ```
 
-## 3. 环境要求
+## 3. Git 分支
+
+| 分支 | 用途 |
+| --- | --- |
+| `clean-structure` | **推荐**：当前 monorepo（`client/` + `server/` + `docs/`），无旧版根目录代码 |
+| `master` | 保留远端历史合并结果，根目录仍含旧结构（如 `api/`、`app.js`） |
+
+克隆或换机拉代码：
+
+```bash
+git clone https://github.com/poison021212/MovieMate.git
+cd MovieMate
+git checkout clean-structure
+```
+
+已在本地仓库时：`git fetch origin && git checkout clean-structure && git pull`。
+
+可选：在 GitHub 仓库 Settings → Branches 将默认分支改为 `clean-structure`，避免误拉 `master`。
+
+## 4. 环境要求
 
 - Node.js 20 LTS（推荐）
 - MySQL 8.x 或 5.7+
 - 可选：TMDB、DashScope 密钥（AI 与同步）
 
-## 4. 启动步骤
+## 5. 启动步骤
 
 1. 根目录 `npm install`
 2. 初始化库：`mysql -u root -p < server/sql/init.sql` 或 `source .../init.sql`
@@ -34,7 +53,7 @@ MovieMate-master/
 
 端口默认：API `1337`，前端 `5173`（Vite 代理 `/api` -> 1337）。
 
-## 5. 环境变量
+## 6. 环境变量
 
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
@@ -46,11 +65,11 @@ MovieMate-master/
 
 前端可选：`VITE_API_URL`（默认 `http://localhost:1337/api`）。
 
-## 6. 静态资源
+## 7. 静态资源
 
 - 占位海报：[`client/public/no-image.png`](../../client/public/no-image.png)（需自行放置，避免兜底 404）
 
-## 7. 常见问题
+## 8. 常见问题
 
 | 现象 | 处理 |
 | --- | --- |
@@ -59,7 +78,7 @@ MovieMate-master/
 | TMDB/Postman 超时 | 检查网络/DNS/代理，非仅 token 问题 |
 | 速览/收藏异常 | 确认已登录且 JWT 未过期 |
 
-## 8. 生产构建
+## 9. 生产构建
 
 ```bash
 npm run build -w moviemate-client
@@ -67,7 +86,7 @@ npm run build -w moviemate-client
 
 产物：`client/dist`，需自行配置静态托管与 API 地址。
 
-## 9. 实现位置
+## 10. 实现位置
 
 - 入口：[`server/server.js`](../../server/server.js)、[`client/src/main.jsx`](../../client/src/main.jsx)
 - 数据库池：[`server/db/index.js`](../../server/db/index.js)

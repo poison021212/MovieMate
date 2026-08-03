@@ -1,0 +1,85 @@
+# 电影列表查询（分页 / 搜索 / 排序 / 筛选）
+
+- 状态：已实现
+- 负责人：MovieMate 维护者
+- 最后核对日期：2026-08-03
+
+## 1. 目标
+
+为首页提供可扩展的电影浏览能力：服务端分页、关键词搜索、排序与多条件筛选，并将筛选状态同步到浏览器 URL，便于刷新与分享。
+
+验证链路：
+
+```text
+MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
+```
+
+## 2. 不做什么
+
+- 不提供电影增删改管理后台；
+- 不在前端一次性拉取全库再在浏览器内 filter（已改为服务端条件查询）；
+- 不保证 `year` 字段与 TMDB `release_date` 自动一致（取决于入库数据）。
+
+## 3. 用户流程
+
+1. 用户进入首页 `/`；
+2. 默认加载第 1 页（`pageSize=12`）；
+3. 输入关键词后点击搜索或回车，提交 `q` 并回到第 1 页；
+4. 可选最低评分、年份、类型，以及排序字段与方向；
+5. 翻页或修改每页条数；修改 `pageSize` 时回到第 1 页；
+6. 点击「重置筛选」清空条件与 URL query；
+7. 点击卡片进入 `/movie/:id` 详情。
+
+## 4. 前后端契约
+
+| 场景 | Method + Path | 关键请求 | 关键响应 | 限制 |
+| --- | --- | --- | --- | --- |
+| 分页列表 | `GET /api/movies` | 见下表 query | `{ message, data[], pagination }` | `page/pageSize >= 1` |
+| 电影详情 | `GET /api/movies/:id` | 路径 `id` 为本地主键 | `{ message, data: movie }` | `id` 须为数字 |
+
+### Query 参数（列表）
+
+| 参数 | 说明 | 默认 |
+| --- | --- | --- |
+| `page` | 页码 | 1 |
+| `pageSize` | 每页条数 | 12 |
+| `q` | 片名 / 导演 / 演员模糊匹配 | 无 |
+| `sortBy` | `id` / `rating` / `year` / `title` / `release_date` / `popularity` / `vote_count` | `id` |
+| `sortOrder` | `asc` / `desc` | `asc` |
+| `minRating` | 评分下限 | 无 |
+| `year` | 与 `movies.year` 精确匹配 | 无 |
+| `genre` | 与 `movies.genre` 精确匹配 | 无 |
+
+列表项含 `documentId`（等于 `id`），兼容历史 Strapi 形态。前端 `transformResponse` 返回 `{ items, pagination }`。
+
+### URL 同步（前端）
+
+首页将 `page`、`pageSize`、`q`、`sortBy`、`sortOrder`、`minRating`、`year`、`genre` 写入 location search（默认值省略），刷新后恢复。
+
+## 5. 数据边界
+
+- 主表：`movie_db.movies`；
+- 搜索：`title`、`director`、`actors` 使用 `LIKE`；
+- 排序字段白名单，防止 SQL 注入；
+- 海报字段经 `normalizePoster` 统一为可展示 URL，失败时使用 `/no-image.png`。
+
+## 6. 性能与安全
+
+- 使用 `LIMIT/OFFSET` + `COUNT(*)`，避免全表返回；
+- 大数据量下 OFFSET 深分页可能变慢（后续可演进为 keyset 分页）；
+- 列表接口当前无需登录。
+
+## 7. 验收标准
+
+- [ ] 默认第一页返回 `pagination.total` 与 `data` 长度一致；
+- [ ] 翻页、改 `pageSize` 行为正确；
+- [ ] 搜索 + 筛选 + 排序组合有效；
+- [ ] URL 刷新后条件保留；
+- [ ] 重置后 URL 与列表恢复默认。
+
+## 8. 实现位置
+
+- 后端：[`server/router_handler/movie.js`](../../server/router_handler/movie.js)、[`server/router/movie.js`](../../server/router/movie.js)
+- 前端 API：[`client/src/store/API/MovieApi.jsx`](../../client/src/store/API/MovieApi.jsx)
+- 前端页面：[`client/src/components/MovieList.jsx`](../../client/src/components/MovieList.jsx)、[`client/src/components/MovieCard.jsx`](../../client/src/components/MovieCard.jsx)
+- Hook：[`client/src/hooks/useMovieItems.jsx`](../../client/src/hooks/useMovieItems.jsx)

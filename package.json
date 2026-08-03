@@ -1,19 +1,19 @@
-{
-  "name": "moviemate",
-  "version": "1.0.0",
-  "private": true,
-  "description": "光影笔记 MovieMate — 电影社区 Demo",
-  "workspaces": [
-    "client",
-    "server"
-  ],
-  "scripts": {
-    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w moviemate-server\" \"npm run dev -w moviemate-client\"",
-    "dev:server": "npm run dev -w moviemate-server",
-    "dev:client": "npm run dev -w moviemate-client",
-    "install:all": "npm install"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.2"
-  }
-}
+{
+  "name": "moviemate",
+  "version": "1.0.0",
+  "private": true,
+  "description": "光影笔记 MovieMate — 电影社区 Demo",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w moviemate-server\" \"npm run dev -w moviemate-client\"",
+    "dev:server": "npm run dev -w moviemate-server",
+    "dev:client": "npm run dev -w moviemate-client",
+    "install:all": "npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

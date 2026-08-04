@@ -183,7 +183,9 @@ SELECT tmdb_id, COUNT(*) c FROM movies WHERE tmdb_id IS NOT NULL GROUP BY tmdb_i
 
 ## 2 分钟演示脚本（答辩 / 录屏）
 
-前置：`init.sql` 已执行，可选 `demo_seed.sql`；`server/.env` 含 DB、JWT、TMDB、DashScope；`npm run dev` 已启动。
+前置：`init.sql` 已执行，可选 `demo_seed.sql`；`server/.env` 含 DB、JWT、**TMDB、DashScope**；`npm run dev` 已启动。
+
+Cloud Agent 上可将 `TMDB_ACCESS_TOKEN`、`DASHSCOPE_API_KEY` 配在 [Cloud Agents Secrets](https://cursor.com/dashboard/cloud-agents)，并在环境中 **Update Existing Env** 后重跑；或本地执行 `server/scripts/sync-env-from-secrets.sh` 写入 `server/.env`（勿提交）。
 
 | 步骤 | 操作 | 预期 |
 | --- | --- | --- |

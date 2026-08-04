@@ -2,7 +2,7 @@
 
 - 状态：已实现
 - 负责人：MovieMate 维护者
-- 最后核对日期：2026-08-03
+- 最后核对日期：2026-08-04
 
 ## 1. 目标
 
@@ -34,7 +34,7 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 
 | 场景 | Method + Path | 关键请求 | 关键响应 | 限制 |
 | --- | --- | --- | --- | --- |
-| 分页列表 | `GET /api/movies` | 见下表 query | `{ message, data[], pagination }` | `page/pageSize >= 1` |
+| 分页列表 | `GET /api/movies` | 见下表 query | `{ message, data[], pagination, meta }` | `page/pageSize >= 1` |
 | 电影详情 | `GET /api/movies/:id` | 路径 `id` 为本地主键 | `{ message, data: movie }` | `id` 须为数字 |
 
 ### Query 参数（列表）
@@ -44,13 +44,16 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 | `page` | 页码 | 1 |
 | `pageSize` | 每页条数 | 12 |
 | `q` | 片名 / 导演 / 演员模糊匹配 | 无 |
+| `hybrid` | `1` 时启用本地优先 + TMDB fallback（仅第 1 页且本地结果不足时） | 0 |
 | `sortBy` | `id` / `rating` / `year` / `title` / `release_date` / `popularity` / `vote_count` | `id` |
 | `sortOrder` | `asc` / `desc` | `asc` |
 | `minRating` | 评分下限 | 无 |
 | `year` | 与 `movies.year` 精确匹配 | 无 |
 | `genre` | 与 `movies.genre` 精确匹配 | 无 |
 
-列表项含 `documentId`（等于 `id`），兼容历史 Strapi 形态。前端 `transformResponse` 返回 `{ items, pagination }`。
+列表项含 `documentId`（等于 `id`），兼容历史 Strapi 形态。前端 `transformResponse` 返回 `{ items, pagination, meta }`。
+
+当 `hybrid=1` 且第一页关键词搜索结果少于阈值时，后端会查 TMDB 并将命中条目写回 `movies`，再重新查询本地。`meta` 字段：`source`（`local`/`mixed`/`tmdb`）、`hybrid`、`fallbackTriggered`、`tmdbFetched`、`tmdbPersisted`。
 
 ### URL 同步（前端）
 

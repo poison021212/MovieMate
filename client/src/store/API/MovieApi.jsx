@@ -40,6 +40,7 @@ const MovieApi = createApi({
         page = 1,
         pageSize = 12,
         q = '',
+        hybrid = false,
         sortBy = 'id',
         sortOrder = 'asc',
         minRating,
@@ -53,6 +54,7 @@ const MovieApi = createApi({
           sortOrder,
         })
         if (q) params.set('q', q)
+        if (hybrid) params.set('hybrid', '1')
         if (minRating !== undefined && minRating !== '' && minRating !== null) {
           params.set('minRating', String(minRating))
         }
@@ -75,6 +77,13 @@ const MovieApi = createApi({
             pageSize: items.length,
             total: items.length,
             totalPages: 1,
+          },
+          meta: baseQueryReturnValue.meta || {
+            source: 'local',
+            hybrid: false,
+            fallbackTriggered: false,
+            tmdbFetched: 0,
+            tmdbPersisted: 0,
           },
         }
       },

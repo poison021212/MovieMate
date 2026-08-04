@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Row, Col, Input, Pagination, Select, Space, Button, InputNumber } from 'antd'
+import { Row, Col, Input, Pagination, Select, Space, Button, InputNumber, Alert } from 'antd'
 import MovieCard from './MovieCard'
 import { useGetMoviesQuery } from '@/store/API/MovieApi'
 
@@ -104,6 +104,7 @@ const MovieList = () => {
     page,
     pageSize,
     q: searchTerm,
+    hybrid: true,
     sortBy,
     sortOrder,
     minRating: minRating ?? undefined,
@@ -126,6 +127,7 @@ const MovieList = () => {
 
   const movies = data?.items || []
   const pagination = data?.pagination || { page: 1, pageSize: 12, total: 0, totalPages: 0 }
+  const meta = data?.meta || null
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: 60 }}>加载中...</div>
   if (isError) return <div style={{ color: 'red' }}>错误: {error?.status || '请求失败'}</div>
@@ -213,6 +215,19 @@ const MovieList = () => {
           </Col>
         ))}
       </Row>
+
+      {meta?.hybrid && searchTerm && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginTop: 16 }}
+          message={`搜索来源：${meta.source}${
+            meta.fallbackTriggered
+              ? `（TMDB 回退：抓取 ${meta.tmdbFetched} 条，写回 ${meta.tmdbPersisted} 条）`
+              : ''
+          }`}
+        />
+      )}
 
       {movies.length === 0 && (
         <div style={{ textAlign: 'center', padding: 40 }}>未找到相关电影</div>

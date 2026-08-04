@@ -84,8 +84,16 @@ const MovieApi = createApi({
             fallbackTriggered: false,
             tmdbFetched: 0,
             tmdbPersisted: 0,
+            aggregate: undefined,
           },
         }
+      },
+    }),
+
+    getHybridSearchStats: builder.query({
+      query: () => 'movies/hybrid-stats',
+      transformResponse(baseQueryReturnValue) {
+        return baseQueryReturnValue.data || null
       },
     }),
 
@@ -104,5 +112,5 @@ const MovieApi = createApi({
   }),
 })
 
-export const { useGetMoviesQuery, useGetMoviesByIdQuery } = MovieApi
+export const { useGetMoviesQuery, useGetMoviesByIdQuery, useGetHybridSearchStatsQuery } = MovieApi
 export default MovieApi

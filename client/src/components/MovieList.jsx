@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Row, Col, Input, Pagination, Select, Space, Button, InputNumber, Alert } from 'antd'
+import { Row, Col, Input, Pagination, Select, Space, Button, InputNumber, Alert, Collapse, Statistic } from 'antd'
 import MovieCard from './MovieCard'
-import { useGetMoviesQuery } from '@/store/API/MovieApi'
+import { useGetMoviesQuery, useGetHybridSearchStatsQuery } from '@/store/API/MovieApi'
 
 const { Search } = Input
 
@@ -112,6 +112,14 @@ const MovieList = () => {
     genre: genre || undefined,
   })
 
+  const { data: hybridStats, refetch: refetchHybridStats } = useGetHybridSearchStatsQuery(undefined, {
+    pollingInterval: 30000,
+  })
+
+  useEffect(() => {
+    if (searchTerm) refetchHybridStats()
+  }, [data, searchTerm, refetchHybridStats])
+
   const resetFilters = () => {
     setInputValue('')
     setSearchTerm('')
@@ -128,6 +136,7 @@ const MovieList = () => {
   const movies = data?.items || []
   const pagination = data?.pagination || { page: 1, pageSize: 12, total: 0, totalPages: 0 }
   const meta = data?.meta || null
+  const aggregate = meta?.aggregate || hybridStats?.rates
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: 60 }}>加载中...</div>
   if (isError) return <div style={{ color: 'red' }}>错误: {error?.status || '请求失败'}</div>
@@ -221,11 +230,61 @@ const MovieList = () => {
           type="info"
           showIcon
           style={{ marginTop: 16 }}
-          message={`搜索来源：${meta.source}${
+          message={`本次来源：${meta.source}${
             meta.fallbackTriggered
               ? `（TMDB 回退：抓取 ${meta.tmdbFetched} 条，写回 ${meta.tmdbPersisted} 条）`
+              : '（本地命中，未触发回退）'
+          }${
+            aggregate
+              ? ` | 累计本地命中率 ${aggregate.localHitRatePercent}% ，回退触发率 ${aggregate.fallbackTriggerRatePercent}%`
               : ''
           }`}
+        />
+      )}
+
+      {hybridStats && (
+        <Collapse
+          style={{ marginTop: 12 }}
+          items={[
+            {
+              key: 'hybrid-stats',
+              label: 'Hybrid 搜索观测（服务端进程内累计，重启清零）',
+              children: (
+                <Row gutter={[16, 16]}>
+                  <Col xs={12} sm={8}>
+                    <Statistic title="关键词请求数" value={hybridStats.hybridKeywordRequests} />
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <Statistic
+                      title="本地命中率"
+                      value={hybridStats.rates?.localHitRatePercent ?? 0}
+                      suffix="%"
+                    />
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <Statistic
+                      title="回退触发率"
+                      value={hybridStats.rates?.fallbackTriggerRatePercent ?? 0}
+                      suffix="%"
+                    />
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <Statistic title="TMDB 抓取累计" value={hybridStats.tmdbFetchedTotal} />
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <Statistic title="本地写回累计" value={hybridStats.tmdbPersistedTotal} />
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <Statistic
+                      title="写回有效率"
+                      value={hybridStats.rates?.persistEfficiencyPercent ?? 0}
+                      suffix="%"
+                    />
+                  </Col>
+                </Row>
+              ),
+            },
+          ]}
         />
       )}
 

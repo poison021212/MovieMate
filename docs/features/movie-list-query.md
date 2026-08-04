@@ -35,6 +35,7 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 | 场景 | Method + Path | 关键请求 | 关键响应 | 限制 |
 | --- | --- | --- | --- | --- |
 | 分页列表 | `GET /api/movies` | 见下表 query | `{ message, data[], pagination, meta }` | `page/pageSize >= 1` |
+| Hybrid 统计 | `GET /api/movies/hybrid-stats` | 无 | `{ message, data: 累计指标 }` | 进程内累计，重启清零 |
 | 电影详情 | `GET /api/movies/:id` | 路径 `id` 为本地主键 | `{ message, data: movie }` | `id` 须为数字 |
 
 ### Query 参数（列表）
@@ -53,7 +54,11 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 
 列表项含 `documentId`（等于 `id`），兼容历史 Strapi 形态。前端 `transformResponse` 返回 `{ items, pagination, meta }`。
 
-当 `hybrid=1` 且第一页关键词搜索结果少于阈值时，后端会查 TMDB 并将命中条目写回 `movies`，再重新查询本地。`meta` 字段：`source`（`local`/`mixed`/`tmdb`）、`hybrid`、`fallbackTriggered`、`tmdbFetched`、`tmdbPersisted`。
+当 `hybrid=1` 且第一页关键词搜索结果少于阈值时，后端会查 TMDB 并将命中条目写回 `movies`，再重新查询本地。`meta` 字段：`source`（`local`/`mixed`/`tmdb`）、`hybrid`、`fallbackTriggered`、`tmdbFetched`、`tmdbPersisted`、`aggregate`（累计比率快照：`localHitRatePercent`、`fallbackTriggerRatePercent`、`persistEfficiencyPercent`）。
+
+### 观测接口
+
+`GET /api/movies/hybrid-stats` 返回自进程启动以来的累计计数与比率，用于观察本地命中率与 TMDB fallback 成本（Demo 环境内存统计，生产应改为持久化或日志系统）。
 
 ### URL 同步（前端）
 

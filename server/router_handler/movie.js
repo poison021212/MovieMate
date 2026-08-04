@@ -1,4 +1,8 @@
 const db = require('../db/index.js')
+const {
+  recordHybridSearchEvent,
+  getHybridSearchMetricsSnapshot,
+} = require('../utils/hybridSearchMetrics.js')
 
 const TMDB_TOKEN = process.env.TMDB_ACCESS_TOKEN
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
@@ -206,6 +210,7 @@ exports.getMovies = async (req, res) => {
     let tmdbFetched = 0
     let tmdbPersisted = 0
     let fallbackTriggered = false
+    let fallbackError = false
 
     if (
       useHybrid &&
@@ -223,9 +228,23 @@ exports.getMovies = async (req, res) => {
           source = pageResult.data.length > 0 ? 'mixed' : 'tmdb'
         }
       } catch (tmdbErr) {
+        fallbackError = true
         console.error('hybrid fallback error:', tmdbErr)
       }
     }
+
+    if (useHybrid && queryCtx.q) {
+      recordHybridSearchEvent({
+        hadKeyword: true,
+        fallbackTriggered,
+        fallbackError,
+        source,
+        tmdbFetched,
+        tmdbPersisted,
+      })
+    }
+
+    const metricsSnapshot = useHybrid ? getHybridSearchMetricsSnapshot() : undefined
 
     res.success(
       {
@@ -243,6 +262,7 @@ exports.getMovies = async (req, res) => {
           fallbackTriggered,
           tmdbFetched,
           tmdbPersisted,
+          ...(metricsSnapshot ? { aggregate: metricsSnapshot.rates } : {}),
         },
       },
       200
@@ -250,6 +270,21 @@ exports.getMovies = async (req, res) => {
   } catch (err) {
     console.error('getMovies error:', err)
     res.cc('获取电影列表失败', 500)
+  }
+}
+
+exports.getHybridSearchStats = async (req, res) => {
+  try {
+    res.success(
+      {
+        message: 'hybrid 搜索观测统计（进程内，重启清零）',
+        data: getHybridSearchMetricsSnapshot(),
+      },
+      200
+    )
+  } catch (err) {
+    console.error('getHybridSearchStats error:', err)
+    res.cc('获取 hybrid 统计失败', 500)
   }
 }
 

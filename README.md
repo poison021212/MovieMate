@@ -56,6 +56,14 @@ npm install
 mysql -u root -p < server/sql/init.sql
 ```
 
+可选：导入演示账号与口味种子（AI 推荐闭环演示）：
+
+```bash
+mysql -u root -p movie_db < server/sql/demo_seed.sql
+```
+
+账号 `demo_user`，密码 `123456`（详见 [runtime-and-config.md](docs/features/runtime-and-config.md)）。
+
 Windows PowerShell 若重定向不便，可在 MySQL 客户端中执行：
 
 ```sql

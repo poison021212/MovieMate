@@ -19,15 +19,15 @@ function MovieDetail() {
   const [addFavorite] = useAddFavoriteMutation()
   const [showFullCast, setShowFullCast] = useState(false);
 
+  const navigate = useNavigate();
+  const location = useLocation();
+
   useEffect(() => {
     if (location.hash === '#movie-review') {
       const el = document.getElementById('movie-review');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [location.hash, movie?.id]);
-
-  const navigate = useNavigate();
-  const location = useLocation();
 
   if (isLoading) {
     return <div style={{ padding: 50, textAlign: 'center' }}>加载中...</div>;

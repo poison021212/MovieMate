@@ -1,4 +1,5 @@
-import { Row, Col, Card, Button, Empty } from 'antd';
+import { Row, Col, Card, Button, Empty, message } from 'antd';
+import { confirmDanger } from '@/utils/confirmDialog';
 import { HeartFilled } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import useMovieItems from '@/hooks/useMovieItems';
@@ -29,17 +30,21 @@ function Profile() {
     favoriteArray.some(favoriteItem => favoriteItem.movieId === movie.documentId)
   );
   // console.log('已收藏', favoriteMovies)
-  const handleRemove = async (movieId) => {
-    // 找到对应的收藏记录
+  const handleRemove = async (movieId, movieTitle) => {
     const favoriteItem = favoriteArray.find(item => item.movieId === movieId);
-    if (favoriteItem) {
-      try {
-        await delFavorite(favoriteItem.documentId).unwrap();
-        // 删除成功后，刷新收藏列表
-        refetch();
-      } catch (error) {
-        console.error('删除收藏失败:', error);
-      }
+    if (!favoriteItem) return;
+    try {
+      await confirmDanger({
+        title: '取消收藏？',
+        content: movieTitle ? `确定将《${movieTitle}》从收藏中移除吗？` : '确定取消收藏这部电影吗？',
+      });
+      await delFavorite(favoriteItem.documentId).unwrap();
+      refetch();
+      message.success('已取消收藏');
+    } catch (error) {
+      if (error?.message === 'cancelled') return;
+      console.error('删除收藏失败:', error);
+      message.error('取消收藏失败');
     }
   };
 
@@ -84,7 +89,7 @@ function Profile() {
                   type="text"
                   danger
                   icon={<HeartFilled />}
-                  onClick={() => handleRemove(movie.documentId)}
+                  onClick={() => handleRemove(movie.documentId, movie.title)}
                 >
                   取消收藏
                 </Button>

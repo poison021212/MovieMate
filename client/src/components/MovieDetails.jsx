@@ -1,5 +1,6 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Row, Col, Image, Descriptions, Divider, Button, Space, Typography, message } from 'antd';
+import { confirmDanger } from '@/utils/confirmDialog';
 import { HeartOutlined, HeartFilled, DownOutlined, UpOutlined } from '@ant-design/icons';
 import { useState, useEffect } from 'react';
 import { useGetMoviesByIdQuery } from '@/store/API/MovieApi';
@@ -56,16 +57,22 @@ function MovieDetail() {
 
     try {
       if (isFavorite) {
-        // 移除收藏：使用已找到的收藏记录 ID
+        await confirmDanger({
+          title: '取消收藏？',
+          content: `确定将《${movie.title}》从收藏中移除吗？`,
+        })
         if (favoriteItem) {
           await delFavorite(favoriteItem.documentId).unwrap();
+          message.success('已取消收藏');
         }
       } else {
         // 添加收藏，传递电影 ID 和用户名
         await addFavorite({ movieId: Number(id), username: auth.userInfo?.username }).unwrap();
       }
     } catch (error) {
+      if (error?.message === 'cancelled') return
       console.error('操作收藏失败:', error);
+      message.error('收藏操作失败');
     }
   };
 

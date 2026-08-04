@@ -1,11 +1,11 @@
 import { useGetReviewQuery, useAddReviewMutation, useDelReviewMutation, useGetReviewRepliesQuery, useAddReviewReplyMutation, useDeleteReviewReplyMutation } from "../store/API/reviewApi";
 import { useParams } from 'react-router-dom'
 import { useState } from 'react'
-import { Form, Input, message, Rate, List, Avatar, Divider, Space, Button, Modal, Alert } from 'antd';
+import { Form, Input, message, Rate, List, Avatar, Divider, Space, Button, Alert } from 'antd';
 import { UserOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom'
 import { useSelector } from "react-redux";
-import { useLocation } from "react-router-dom";
+import { confirmDanger } from '@/utils/confirmDialog';
 
 const { TextArea } = Input;
 
@@ -99,10 +99,15 @@ function ReviewThreadItem({ item, auth, navigate, location, onDeleteReview }) {
                           danger
                           onClick={async () => {
                             try {
-                              await deleteReply(r.documentId || r.id).unwrap();
-                              refetchReplies();
-                            } catch {
-                              message.error('删除失败');
+                              await confirmDanger({
+                                title: '删除这条回复？',
+                                content: '删除后不可恢复',
+                              })
+                              await deleteReply(r.documentId || r.id).unwrap()
+                              refetchReplies()
+                              message.success('已删除回复')
+                            } catch (e) {
+                              if (e?.message !== 'cancelled') message.error('删除失败')
                             }
                           }}
                         >
@@ -184,7 +189,7 @@ const ReviewsForm = () => {
     }
   }
 
-  const delReviewHandler = async (reviewId, username) => {
+  const delReviewHandler = (reviewId, username) => {
     if (!auth.isLogin) {
       message.error('请先登录后再删除评论');
       navigate('/auth', { state: { from: location } });
@@ -194,22 +199,20 @@ const ReviewsForm = () => {
       message.error('只能删除自己的评论');
       return;
     }
-    Modal.confirm({
-      title: "确认删除吗？",
-      content: "删除后不可恢复",
-      cancelText: "取消",
-      okText: "确定",
-      onOk: async () => {
+    confirmDanger({
+      title: '删除这条评论？',
+      content: '删除后不可恢复，其下的回复也会一并删除',
+    })
+      .then(async () => {
         try {
           await delReview(reviewId).unwrap();
           message.success('评论删除成功');
           refetch();
-        } catch (error) {
+        } catch {
           message.error('删除评论失败');
-          throw error;
         }
-      }
-    })
+      })
+      .catch(() => {});
   }
 
   return (

@@ -9,6 +9,7 @@ import { Modal, Input, Button, List, Avatar, Typography, Spin } from 'antd'
 import { useAddFavoriteMutation, useDelFavoriteMutation, useGetFavoriteQuery } from '@/store/API/favoriteApi'
 import { useGetReviewQuery, useAddReviewMutation } from '@/store/API/reviewApi'
 import { speakText, stopSpeaking, isSpeechSupported } from '@/utils/speakText'
+import { confirmDanger } from '@/utils/confirmDialog'
 
 const { Text, Paragraph } = Typography
 const SWIPE_PAGE_SIZE = 10
@@ -166,6 +167,10 @@ const MovieSwipe = () => {
     try {
       const favoriteItem = getFavoriteItem(movie.documentId)
       if (favoriteItem) {
+        await confirmDanger({
+          title: '取消收藏？',
+          content: `确定将《${movie.title}》从收藏中移除吗？`,
+        })
         await delFavorite(favoriteItem.id || favoriteItem.documentId)
       } else {
         await addFavorite({
@@ -174,6 +179,7 @@ const MovieSwipe = () => {
         })
       }
     } catch (error) {
+      if (error?.message === 'cancelled') return
       console.error('收藏操作失败:', error)
       alert('收藏操作失败，请重试')
     }

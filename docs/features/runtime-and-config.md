@@ -2,7 +2,7 @@
 
 - 状态：已实现
 - 负责人：MovieMate 维护者
-- 最后核对日期：2026-08-03
+- 最后核对日期：2026-08-04
 
 ## 1. 目标
 
@@ -48,8 +48,11 @@ git checkout clean-structure
 
 1. 根目录 `npm install`
 2. 初始化库：`mysql -u root -p < server/sql/init.sql` 或 `source .../init.sql`
-3. `copy server\.env.example server\.env` 并填写 `DB_*`、`JWT_SECRET`
-4. 根目录 `npm run dev`（或分别 `npm run dev:server` / `npm run dev:client`）
+3. （可选）演示账号与口味数据：`mysql -u root -p movie_db < server/sql/demo_seed.sql`  
+   - 用户 `demo_user` / 密码 `123456`  
+   - 为评分最高的若干本地电影写入收藏与观后笔记（可重复执行）
+4. `copy server\.env.example server\.env` 并填写 `DB_*`、`JWT_SECRET`
+5. 根目录 `npm run dev`（或分别 `npm run dev:server` / `npm run dev:client`）
 
 端口默认：API `1337`，前端 `5173`（Vite 代理 `/api` -> 1337）。
 
@@ -90,4 +93,4 @@ npm run build -w moviemate-client
 
 - 入口：[`server/server.js`](../../server/server.js)、[`client/src/main.jsx`](../../client/src/main.jsx)
 - 数据库池：[`server/db/index.js`](../../server/db/index.js)
-- 初始化 SQL：[`server/sql/init.sql`](../../server/sql/init.sql)
+- 初始化 SQL：[`server/sql/init.sql`](../../server/sql/init.sql)、演示种子 [`server/sql/demo_seed.sql`](../../server/sql/demo_seed.sql)

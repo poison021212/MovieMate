@@ -1,7 +1,7 @@
 import { useGetReviewQuery, useAddReviewMutation, useDelReviewMutation } from "../store/API/reviewApi";
 import { useParams } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { Form, Input, message, Rate, List, Avatar, Divider, Space, Button, Modal } from 'antd';
+import { Form, Input, message, Rate, List, Avatar, Divider, Space, Button, Modal, Alert } from 'antd';
 import { UserOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from "react-redux";
@@ -176,7 +176,13 @@ const ReviewsForm = () => {
 
       {/* 写影评表单 */}
       <div>
-        <h3>写影评</h3>
+        <h3>写观后笔记</h3>
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="写下评分与感受后，登录状态下 AI 推荐会参考你的收藏与笔记（轻量口味档案）。"
+        />
         <Form form={form} layout="vertical" onFinish={submitReview}>
           <Form.Item name="movieId" initialValue={id} hidden />
           <Form.Item name="username" initialValue={auth.userInfo?.username || '匿名用户'} hidden />

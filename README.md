@@ -172,3 +172,27 @@ SELECT tmdb_id, COUNT(*) c FROM movies WHERE tmdb_id IS NOT NULL GROUP BY tmdb_i
 ```
 
 预期 0 行。
+
+## 2 分钟演示脚本（答辩 / 录屏）
+
+前置：`init.sql` 已执行，可选 `demo_seed.sql`；`server/.env` 含 DB、JWT、TMDB、DashScope；`npm run dev` 已启动。
+
+| 步骤 | 操作 | 预期 |
+| --- | --- | --- |
+| 1 | 打开首页，搜索关键词并观察列表上方 **来源**（本地 / TMDB 回写） | `meta.source` 与 hybrid 统计可展开查看 |
+| 2 | 登录 `demo_user` / `123456` | JWT 写入本地存储 |
+| 3 | 进入 **AI 推荐**，输入「推荐几部悬疑片」 | 返回卡片；`meta.localMappedRatePercent` 较高；标签「已注入口味档案」 |
+| 4 | 点击 **查看详情** | 进入 `/movie/:localId` 站内页 |
+| 5 | 点击 **写笔记** 或滚动至观后笔记 | `#movie-review` 锚点定位表单 |
+| 6 | 提交一条评分与内容 | 刷新后列表可见；再次 AI 推荐仍带 `profileApplied` |
+
+### 效果指标速查
+
+| 能力 | 观测方式 |
+| --- | --- |
+| 列表 hybrid 命中率 | 首页来源提示 + `GET /api/movies/hybrid-stats` |
+| AI grounding | 推荐页 `meta.groundedCount` = 展示卡片数 |
+| 站内闭环 | 推荐卡片绿色「站内 ID」+ 详情/写笔记无外链 |
+| 口味档案 | 登录后 `meta.profileApplied: true` |
+
+详细契约见 [movie-list-query.md](docs/features/movie-list-query.md)、[ai-recommendation.md](docs/features/ai-recommendation.md)。

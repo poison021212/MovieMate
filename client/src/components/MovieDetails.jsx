@@ -1,7 +1,7 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Row, Col, Image, Descriptions, Divider, Button, Space, Typography, message } from 'antd';
 import { HeartOutlined, HeartFilled, DownOutlined, UpOutlined } from '@ant-design/icons';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGetMoviesByIdQuery } from '@/store/API/MovieApi';
 import { useSelector, useDispatch } from 'react-redux';
 import { addFavorite, removeFavorite } from '../store/Slice/favoriteSlice';
@@ -17,7 +17,14 @@ function MovieDetail() {
   const { data: favorite } = useGetFavoriteQuery()
   const [delFavorite] = useDelFavoriteMutation()
   const [addFavorite] = useAddFavoriteMutation()
-  const [showFullCast, setShowFullCast] = useState(false); // 控制演员列表的显示状态
+  const [showFullCast, setShowFullCast] = useState(false);
+
+  useEffect(() => {
+    if (location.hash === '#movie-review') {
+      const el = document.getElementById('movie-review');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [location.hash, movie?.id]);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -125,7 +132,7 @@ function MovieDetail() {
           </Space>
 
         </Col>
-        <Col xs={24} md={24}>
+        <Col xs={24} md={24} id="movie-review">
           <ReviewsForm />
         </Col>
 

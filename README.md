@@ -13,7 +13,7 @@
 | [movie-detail-favorite.md](docs/features/movie-detail-favorite.md) | 详情与收藏 |
 | [review-flow.md](docs/features/review-flow.md) | 影评 |
 | [swipe-mode.md](docs/features/swipe-mode.md) | 速览模式 |
-| [ai-recommendation.md](docs/features/ai-recommendation.md) | AI 推荐 |
+| [ai-recommendation.md](docs/features/ai-recommendation.md) | AI 推荐（画像列表 + 多轮会话） |
 | [tmdb-sync.md](docs/features/tmdb-sync.md) | TMDB 同步脚本 |
 | [runtime-and-config.md](docs/features/runtime-and-config.md) | 环境与启动 |
 

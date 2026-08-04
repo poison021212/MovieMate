@@ -3,11 +3,12 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import styles from '@/CSS/MovieSwipe.module.css'
 import { useGetMoviesQuery } from '@/store/API/MovieApi'
-import { HeartOutlined, HeartFilled, MessageOutlined } from '@ant-design/icons'
+import { HeartOutlined, HeartFilled, MessageOutlined, SoundOutlined, PauseOutlined } from '@ant-design/icons'
 import { useSelector } from 'react-redux'
 import { Modal, Input, Button, List, Avatar, Typography, Spin } from 'antd'
 import { useAddFavoriteMutation, useDelFavoriteMutation, useGetFavoriteQuery } from '@/store/API/favoriteApi'
 import { useGetReviewQuery, useAddReviewMutation } from '@/store/API/reviewApi'
+import { speakText, stopSpeaking, isSpeechSupported } from '@/utils/speakText'
 
 const { Text, Paragraph } = Typography
 const SWIPE_PAGE_SIZE = 10
@@ -28,6 +29,7 @@ const MovieSwipe = () => {
   const [showComments, setShowComments] = useState(false)
   const [commentContent, setCommentContent] = useState('')
   const [currentMovie, setCurrentMovie] = useState(null)
+  const [speaking, setSpeaking] = useState(false)
   const mergingRef = useRef(false)
 
   const { data, isLoading, isFetching } = useGetMoviesQuery({
@@ -63,6 +65,15 @@ const MovieSwipe = () => {
     mergingRef.current = true
     setFetchPage((p) => p + 1)
   }, [fetchPage, totalPages, isFetching])
+
+  useEffect(() => {
+    stopSpeaking()
+    setSpeaking(false)
+  }, [currentIndex])
+
+  useEffect(() => {
+    return () => stopSpeaking()
+  }, [])
 
   useEffect(() => {
     if (!isFetching) mergingRef.current = false
@@ -211,6 +222,28 @@ const MovieSwipe = () => {
     return []
   }
 
+  const handleToggleSpeak = async (movie) => {
+    if (!isSpeechSupported()) {
+      alert('当前浏览器不支持语音播报')
+      return
+    }
+    if (speaking) {
+      stopSpeaking()
+      setSpeaking(false)
+      return
+    }
+    const text = `${movie.title}。${movie.summary || '暂无简介'}`
+    try {
+      setSpeaking(true)
+      await speakText(text)
+    } catch (e) {
+      console.error(e)
+      alert('播报失败')
+    } finally {
+      setSpeaking(false)
+    }
+  }
+
   return (
     <div className={styles['swipe-container']}>
       {movies.map((movie, idx) => {
@@ -256,6 +289,16 @@ const MovieSwipe = () => {
                   ) : (
                     <HeartOutlined />
                   )}
+                </span>
+                <span
+                  className={styles['icon-item']}
+                  onClick={() => handleToggleSpeak(movie)}
+                  style={{ cursor: 'pointer' }}
+                  role="button"
+                  tabIndex={0}
+                  title={speaking ? '停止播报' : '播报简介'}
+                >
+                  {speaking && idx === currentIndex ? <PauseOutlined /> : <SoundOutlined />}
                 </span>
                 <span
                   className={styles['icon-item']}

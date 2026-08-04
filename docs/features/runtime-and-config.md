@@ -49,6 +49,7 @@ git checkout clean-structure
 1. 根目录 `npm install`
 2. 初始化库：`mysql -u root -p < server/sql/init.sql` 或 `source .../init.sql`
 3. （可选）演示账号与口味数据：`mysql -u root -p movie_db < server/sql/demo_seed.sql`  
+4. 若库已存在且缺少新表：`mysql -u root -p movie_db < server/sql/ai_chat_and_replies.sql`
    - 用户 `demo_user` / 密码 `123456`  
    - 为评分最高的若干本地电影写入收藏与观后笔记（可重复执行）
 4. `copy server\.env.example server\.env` 并填写 `DB_*`、`JWT_SECRET`

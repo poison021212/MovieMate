@@ -48,6 +48,38 @@ CREATE TABLE IF NOT EXISTS favorites (
   CONSTRAINT fk_favorites_movie FOREIGN KEY (movieId) REFERENCES movies(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS ai_recommend_sessions (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(15) NOT NULL,
+  title VARCHAR(255) NOT NULL DEFAULT '新会话',
+  summary TEXT DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_ai_sessions_user (username, updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ai_recommend_messages (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  session_id INT UNSIGNED NOT NULL,
+  role ENUM('user', 'assistant', 'system') NOT NULL,
+  content TEXT NOT NULL,
+  movies_json JSON DEFAULT NULL,
+  meta_json JSON DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_ai_msg_session FOREIGN KEY (session_id) REFERENCES ai_recommend_sessions(id) ON DELETE CASCADE,
+  KEY idx_ai_msg_session (session_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS review_replies (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  review_id INT UNSIGNED NOT NULL,
+  username VARCHAR(15) NOT NULL,
+  content TEXT NOT NULL,
+  date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_reply_review FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE,
+  KEY idx_reply_review (review_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 示例电影（可按需删除或替换 poster 为本地 /uploads/ 路径）
 INSERT INTO movies (title, rating, poster, director, actors, genre, duration, year, summary) VALUES
 ('肖申克的救赎', 9.7, 'https://image.tmdb.org/t/p/w500/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg', '弗兰克·德拉邦特', '蒂姆·罗宾斯, 摩根·弗里曼', '剧情', '142 分钟', '1994', '银行家安迪被冤入狱，在肖申克监狱中用希望与友谊改变命运。'),

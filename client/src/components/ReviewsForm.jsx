@@ -1,15 +1,121 @@
-import { useGetReviewQuery, useAddReviewMutation, useDelReviewMutation } from "../store/API/reviewApi";
+import { useGetReviewQuery, useAddReviewMutation, useDelReviewMutation, useGetReviewRepliesQuery, useAddReviewReplyMutation, useDeleteReviewReplyMutation } from "../store/API/reviewApi";
 import { useParams } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Form, Input, message, Rate, List, Avatar, Divider, Space, Button, Modal, Alert } from 'antd';
 import { UserOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom'
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 import { useLocation } from "react-router-dom";
 
 const { TextArea } = Input;
+
+function ReviewThreadItem({ item, auth, navigate, location, onDeleteReview }) {
+  const [showReplies, setShowReplies] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [expanded, setExpanded] = useState(false);
+
+  const { data: repliesData, refetch: refetchReplies } = useGetReviewRepliesQuery(item.documentId, {
+    skip: !showReplies,
+  });
+  const [addReply] = useAddReviewReplyMutation();
+  const [deleteReply] = useDeleteReviewReplyMutation();
+
+  const replies = repliesData?.data || [];
+
+  const submitReply = async () => {
+    if (!auth.isLogin) {
+      message.error('请先登录');
+      navigate('/auth', { state: { from: location } });
+      return;
+    }
+    if (!replyText.trim()) return;
+    try {
+      await addReply({ reviewId: item.documentId, content: replyText.trim() }).unwrap();
+      setReplyText('');
+      refetchReplies();
+      message.success('回复成功');
+    } catch {
+      message.error('回复失败');
+    }
+  };
+
+  const content = item.content || '';
+  const long = content.length > 100;
+
+  return (
+    <List.Item key={item.id}>
+      <List.Item.Meta
+        avatar={<Avatar icon={<UserOutlined />} />}
+        title={
+          <Space>
+            <span>{item.username || '匿名用户'}</span>
+            <Rate allowHalf disabled value={parseFloat(item.rating) || 0} style={{ fontSize: 14 }} />
+            <span style={{ color: '#999' }}>{item.date || ''}</span>
+          </Space>
+        }
+        description={
+          <div style={{ maxWidth: 640, wordBreak: 'break-word' }}>
+            {long && !expanded ? `${content.slice(0, 100)}...` : content}
+            {long && (
+              <Button type="link" size="small" onClick={() => setExpanded(!expanded)}>
+                {expanded ? '收起' : '查看更多'}
+              </Button>
+            )}
+            <div style={{ marginTop: 8 }}>
+              <Button type="link" size="small" onClick={() => setShowReplies(!showReplies)}>
+                {showReplies ? '收起回复' : `回复 (${replies.length || '…'})`}
+              </Button>
+            </div>
+            {showReplies && (
+              <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: '2px solid #f0f0f0' }}>
+                {replies.map((r) => (
+                  <div key={r.id} style={{ marginBottom: 8 }}>
+                    <Space>
+                      <strong>{r.username}</strong>
+                      <span style={{ color: '#999', fontSize: 12 }}>{r.date}</span>
+                      {auth.isLogin && r.username === auth.userInfo?.username && (
+                        <Button
+                          type="link"
+                          size="small"
+                          danger
+                          onClick={async () => {
+                            try {
+                              await deleteReply(r.documentId || r.id).unwrap();
+                              refetchReplies();
+                            } catch {
+                              message.error('删除失败');
+                            }
+                          }}
+                        >
+                          删除
+                        </Button>
+                      )}
+                    </Space>
+                    <div>{r.content}</div>
+                  </div>
+                ))}
+                <TextArea
+                  rows={2}
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="回复该评论…"
+                  style={{ marginTop: 8 }}
+                />
+                <Button type="primary" size="small" style={{ marginTop: 8 }} onClick={submitReply}>
+                  发表回复
+                </Button>
+              </div>
+            )}
+          </div>
+        }
+      />
+      <DeleteOutlined onClick={() => onDeleteReview(item.documentId, item.username)} />
+    </List.Item>
+  );
+}
+
 const ReviewsForm = () => {
-  const { id } = useParams() // 这里的 id 是电影的 documentId
+  const { id } = useParams()
   const { data: reviews, isLoading, isError, refetch } = useGetReviewQuery()
   const [addReview] = useAddReviewMutation()
   const [delReview] = useDelReviewMutation()
@@ -18,9 +124,6 @@ const ReviewsForm = () => {
   const auth = useSelector(state => state.auth)
   const navigate = useNavigate()
   const location = useLocation()
-  const [expandedComments, setExpandedComments] = useState({});
-  console.log('reviews data:', reviews)
-  // console.log('movie documentId:', id)
 
   if (isLoading) {
     return <div style={{ padding: 24 }}>加载评论中...</div>
@@ -30,7 +133,6 @@ const ReviewsForm = () => {
     return <div style={{ padding: 24 }}>加载评论失败</div>
   }
 
-  // 正确处理数据结构，并根据 movieId 与 documentId 进行匹配
   const reviewArray = reviews?.data || [];
   const movieIdNum = Number(id);
   const filteredReviews = reviewArray.filter(review => review.movieId === movieIdNum);
@@ -44,14 +146,9 @@ const ReviewsForm = () => {
 
     setSubmitting(true);
     try {
-      // 调整数据结构以符合后端 API 要求
       const reviewData = {
         data: {
-          // 转换为数字型与后端匹配
           movieId: Number(id),
-          // username: values.username,//strapi需要username字段
-          // username: values.username,//node.js不需要username字段
-          // 由后端自动生成
           date: values.date,
           rating: values.rating,
           content: values.content
@@ -60,7 +157,6 @@ const ReviewsForm = () => {
       await addReview(reviewData).unwrap();
       message.success('影评提交成功');
       form.resetFields();
-      // 重新获取评论列表，显示新提交的评论
       refetch();
     } catch (error) {
       console.error('提交影评失败:', error);
@@ -70,111 +166,55 @@ const ReviewsForm = () => {
     }
   }
 
-
-
-  const delReviewHandler = async (id, username) => {
+  const delReviewHandler = async (reviewId, username) => {
     if (!auth.isLogin) {
       message.error('请先登录后再删除评论');
       navigate('/auth', { state: { from: location } });
       return;
     }
-    try {
-      // 检查是否是当前用户的评论
-      if (username !== auth.userInfo?.username) {
-        message.error('只能删除自己的评论');
-        return;
-      }
-      Modal.confirm({
-        title: "确认删除吗？",
-        content: "删除后不可恢复",
-        cancelText: "取消",
-        okText: "确定",
-        onOk: async () => {
-          try {
-            await delReview(id, username).unwrap();
-            message.success('评论删除成功');
-            refetch();
-          } catch (error) {
-            message.error('删除评论失败');
-            throw error;
-          }
-        }
-      })
-      // await delReview(id, username).unwrap();
-
-    } catch (error) {
-      console.error('删除评论失败:', error);
-      message.error('删除评论失败');
+    if (username !== auth.userInfo?.username) {
+      message.error('只能删除自己的评论');
+      return;
     }
+    Modal.confirm({
+      title: "确认删除吗？",
+      content: "删除后不可恢复",
+      cancelText: "取消",
+      okText: "确定",
+      onOk: async () => {
+        try {
+          await delReview(reviewId).unwrap();
+          message.success('评论删除成功');
+          refetch();
+        } catch (error) {
+          message.error('删除评论失败');
+          throw error;
+        }
+      }
+    })
   }
 
   return (
     <div style={{ padding: 24 }}>
       <Divider />
-
-      {/* 影评列表 */}
       <div>
         <h2>影评 ({filteredReviews.length || 0})</h2>
         <List
           itemLayout="horizontal"
           dataSource={filteredReviews}
           renderItem={(item) => (
-            <List.Item key={item.id}>
-              <List.Item.Meta
-                avatar={<Avatar icon={<UserOutlined />} />}
-                title={
-                  <Space>
-                    <span>{item.username || '匿名用户'}</span>
-                    <Rate allowHalf disabled value={parseFloat(item.rating) || 0} style={{ fontSize: 14 }} />
-                    <span style={{ color: '#999' }}>{item.date || ''}</span>
-                  </Space>
-                }
-                // 显示评论内容，字数过多时截断显示，点击查看更多，评论内容适配 List.Item 宽度
-                description={
-                  item.content?.length > 100 ? (
-                    <div style={{
-                      width: '100%',
-                      maxWidth: '600px',
-                      whiteSpace: 'normal',//确保空白符正常处理，允许换行
-                      wordBreak: 'break-all',
-                      overflowWrap: 'break-word',
-                    }}>
-                      {expandedComments[item.id] ? item.content : `${item.content.slice(0, 100)}...`}
-                      <Button style={{
-                        color: '#1890ff',
-                        border: 'none',
-                        backgroundColor: 'transparent',
-                        marginLeft: '8px'
-                      }} size="small" onClick={() => setExpandedComments(prev => ({
-                        ...prev,
-                        [item.id]: !prev[item.id]
-                      }))}>
-                        {expandedComments[item.id] ? '收起' : '查看更多'}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div style={{
-                      width: '100%',
-                      maxWidth: '600px',
-                      wordBreak: 'break-all',
-                      overflowWrap: 'break-word',
-                      whiteSpace: 'normal'
-                    }}>
-                      {item.content || ''}
-                    </div>
-                  )
-                }
-              />
-              <DeleteOutlined onClick={() => delReviewHandler(item.documentId, item.username)} />
-            </List.Item>
+            <ReviewThreadItem
+              item={item}
+              auth={auth}
+              navigate={navigate}
+              location={location}
+              onDeleteReview={delReviewHandler}
+            />
           )}
           locale={{ emptyText: '暂无影评' }}
         />
-
       </div>
       <Divider />
-
-      {/* 写影评表单 */}
       <div>
         <h3>写观后笔记</h3>
         <Alert
@@ -185,10 +225,7 @@ const ReviewsForm = () => {
         />
         <Form form={form} layout="vertical" onFinish={submitReview}>
           <Form.Item name="movieId" initialValue={id} hidden />
-          <Form.Item name="username" initialValue={auth.userInfo?.username || '匿名用户'} hidden />
-          {/* 本地日期格式导致错误400，转换为 ISO 格式 */}
           <Form.Item name="date" initialValue={new Date().toISOString().split('T')[0]} hidden />
-
           <Form.Item name="rating" label="评分" rules={[{ required: true, message: '请选择评分' }]}>
             <Rate allowHalf />
           </Form.Item>

@@ -41,9 +41,28 @@ function ReviewThreadItem({ item, auth, navigate, location, onDeleteReview }) {
 
   const content = item.content || '';
   const long = content.length > 100;
+  const canDeleteReview =
+    auth.isLogin && item.username === auth.userInfo?.username;
 
   return (
-    <List.Item key={item.id}>
+    <List.Item
+      key={item.id}
+      style={{ alignItems: 'flex-start' }}
+      actions={
+        canDeleteReview
+          ? [
+              <Button
+                key="delete"
+                type="text"
+                danger
+                icon={<DeleteOutlined />}
+                aria-label="删除评论"
+                onClick={() => onDeleteReview(item.documentId, item.username)}
+              />,
+            ]
+          : []
+      }
+    >
       <List.Item.Meta
         avatar={<Avatar icon={<UserOutlined />} />}
         title={
@@ -109,7 +128,6 @@ function ReviewThreadItem({ item, auth, navigate, location, onDeleteReview }) {
           </div>
         }
       />
-      <DeleteOutlined onClick={() => onDeleteReview(item.documentId, item.username)} />
     </List.Item>
   );
 }

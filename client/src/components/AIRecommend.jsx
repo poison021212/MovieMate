@@ -13,6 +13,7 @@ import {
   Typography,
   Empty,
   Modal,
+  Image,
 } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -28,26 +29,50 @@ import {
 const { TextArea } = Input;
 const { Text, Title } = Typography;
 
-function MovieCard({ movie, onDetail, onNote }) {
+const TMDB_POSTER_BASE = 'https://image.tmdb.org/t/p/w500';
+
+function posterUrl(movie) {
+  if (movie.poster) return movie.poster;
+  if (movie.poster_path) {
+    const p = movie.poster_path;
+    return p.startsWith('http') ? p : `${TMDB_POSTER_BASE}${p}`;
+  }
+  return '/no-image.png';
+}
+
+function MovieCard({ movie, onDetail }) {
   return (
-    <Card
-      size="small"
-      title={movie.title}
-      style={{ marginBottom: 12 }}
-      extra={
-        <Space>
-          <Button type="link" size="small" onClick={() => onDetail(movie)}>
-            详情
-          </Button>
-          <Button type="link" size="small" onClick={() => onNote(movie)}>
-            笔记
-          </Button>
-        </Space>
-      }
-    >
-      <Text type="secondary">{movie.year}</Text>
-      {movie.reason && <p style={{ marginTop: 8 }}>{movie.reason}</p>}
-      {movie.local_movie_id && <Tag color="green">站内 {movie.local_movie_id}</Tag>}
+    <Card size="small" style={{ marginBottom: 12 }} bodyStyle={{ padding: 12 }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <Image
+          src={posterUrl(movie)}
+          alt={movie.title}
+          width={72}
+          height={108}
+          style={{ objectFit: 'cover', borderRadius: 6, flexShrink: 0 }}
+          fallback="/no-image.png"
+          preview={false}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+            <Text strong ellipsis style={{ flex: 1 }}>
+              {movie.title}
+            </Text>
+            <Button type="link" size="small" style={{ flexShrink: 0, padding: 0 }} onClick={() => onDetail(movie)}>
+              详情
+            </Button>
+          </div>
+          <Text type="secondary">{movie.year}</Text>
+          {movie.reason && (
+            <p style={{ marginTop: 8, marginBottom: 0, fontSize: 13 }}>{movie.reason}</p>
+          )}
+          {movie.local_movie_id && (
+            <Tag color="green" style={{ marginTop: 8 }}>
+              站内 {movie.local_movie_id}
+            </Tag>
+          )}
+        </div>
+      </div>
     </Card>
   );
 }
@@ -103,14 +128,6 @@ const AIRecommend = () => {
       return;
     }
     message.warning('暂无站内详情');
-  };
-
-  const goWriteNote = (movie) => {
-    if (!movie.local_movie_id) {
-      message.info('该片尚未入库');
-      return;
-    }
-    navigate(`/movie/${movie.local_movie_id}#movie-review`);
   };
 
   const handleNewSession = async () => {
@@ -201,7 +218,6 @@ const AIRecommend = () => {
                   key={`${movie.local_movie_id || movie.tmdb_id || movie.title}-${idx}`}
                   movie={movie}
                   onDetail={goDetail}
-                  onNote={goWriteNote}
                 />
               ))
             )}

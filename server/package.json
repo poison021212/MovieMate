@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "sync:tmdb": "node scripts/syncTmdbMovies.js"
+    "sync:tmdb": "node scripts/syncTmdbMovies.js",
+    "sync:tmdb:daily": "node scripts/syncTmdbMovies.js --jobs popular,now_playing,upcoming --pages 3",
+    "sync:tmdb:weekly": "node scripts/syncTmdbMovies.js --jobs top_rated --pages 10"
   },
   "type": "commonjs",
   "dependencies": {

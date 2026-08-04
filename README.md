@@ -140,18 +140,20 @@ http://localhost:1337/api/movies?page=1&pageSize=12&sortBy=rating&sortOrder=desc
 需在可访问 `api.themoviedb.org` 的网络环境下执行（公司代理/DNS 异常时会出现 `fetch failed` 或超时）。
 
 1. 在 [TMDB API 设置](https://www.themoviedb.org/settings/api) 获取 **API Read Access Token (v4)**，写入 `server/.env` 的 `TMDB_ACCESS_TOKEN`。
-2. 确保 `movies` 表已有 `tmdb_id` 唯一索引（同步脚本依赖 upsert）。
-3. 在 `server` 目录执行（`3` 表示同步 3 页，每页约 20 条）：
+2. 推荐为 `movies.tmdb_id` 建唯一索引；若仅有基础建表脚本，同步会按现有列写入（见 [tmdb-sync.md](docs/features/tmdb-sync.md)）。
+3. 在 `server` 目录执行（`5` 表示 **每个 job** 同步 5 页，每页约 20 条）：
 
 ```bash
 cd server
-npm run sync:tmdb -- 3
+npm run sync:tmdb -- 5
 ```
 
-或直接：
+多任务增量示例：
 
 ```bash
-node scripts/syncTmdbMovies.js 5
+node scripts/syncTmdbMovies.js --jobs popular,top_rated --pages 5
+npm run sync:tmdb:daily
+npm run sync:tmdb:weekly
 ```
 
 ### 验收（MySQL）

@@ -112,6 +112,10 @@ exports.getReviewReplies = async (req, res) => {
     }))
     res.success({ data })
   } catch (err) {
+    if (err.code === 'ER_NO_SUCH_TABLE') {
+      return res.cc('缺少 review_replies 表，请执行 server/sql/ai_chat_and_replies.sql', 503)
+    }
+    console.error('getReviewReplies', err)
     res.cc('获取回复失败', 500)
   }
 }

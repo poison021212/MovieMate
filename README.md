@@ -16,6 +16,7 @@
 | [ai-recommendation.md](docs/features/ai-recommendation.md) | AI 推荐（画像列表 + 多轮会话） |
 | [tmdb-sync.md](docs/features/tmdb-sync.md) | TMDB 同步脚本 |
 | [runtime-and-config.md](docs/features/runtime-and-config.md) | 环境与启动 |
+| [preview-change-summary-2026-08-04.md](docs/features/preview-change-summary-2026-08-04.md) | **本轮改动汇总与 Preview 指南** |
 
 ## 目录结构
 

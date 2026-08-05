@@ -54,7 +54,16 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 
 列表项含 `documentId`（等于 `id`），兼容历史 Strapi 形态。前端 `transformResponse` 返回 `{ items, pagination, meta }`。
 
-当 `hybrid=1` 且第一页关键词搜索结果少于阈值时，后端会查 TMDB 并将命中条目写回 `movies`，再重新查询本地。`meta` 字段：`source`（`local`/`mixed`/`tmdb`）、`hybrid`、`fallbackTriggered`、`tmdbFetched`、`tmdbPersisted`、`aggregate`（累计比率快照：`localHitRatePercent`、`fallbackTriggerRatePercent`、`persistEfficiencyPercent`）。
+当 `hybrid=1` 且第一页关键词搜索结果少于阈值（默认 5 条）时，后端会尝试 TMDB 并写回 `movies` 再查本地。`meta` 含 `source`、`fallbackTriggered`、`localCountBeforeFallback`、`tmdbFetched`、`tmdbPersisted`、`aggregate`。
+
+累计比率（`aggregate` / `hybrid-stats`）：
+
+| 字段 | 含义 |
+| --- | --- |
+| `localHasResultsRatePercent` | 回退前本地至少命中 1 条的关键词请求占比 |
+| `localOnlyRatePercent` | 本地结果已够、**未触发** TMDB 回退的占比（旧名 `localHitRatePercent` 同义） |
+| `fallbackTriggerRatePercent` | 触发过 TMDB 回退的占比 |
+| `persistEfficiencyPercent` | TMDB 抓取条目中被写回本地的比例 |
 
 ### 观测接口
 

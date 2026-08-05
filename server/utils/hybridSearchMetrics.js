@@ -5,6 +5,7 @@
 const state = {
   hybridKeywordRequests: 0,
   localOnlyResponses: 0,
+  localHasResults: 0,
   fallbackTriggered: 0,
   fallbackErrors: 0,
   tmdbFetchedTotal: 0,
@@ -23,7 +24,7 @@ function pct(numerator, denominator) {
 }
 
 /**
- * @param {{ hadKeyword: boolean, fallbackTriggered: boolean, fallbackError?: boolean, source: string, tmdbFetched: number, tmdbPersisted: number }} event
+ * @param {{ hadKeyword: boolean, fallbackTriggered: boolean, fallbackError?: boolean, source: string, tmdbFetched: number, tmdbPersisted: number, localCountBeforeFallback?: number }} event
  */
 function recordHybridSearchEvent(event) {
   if (!event.hadKeyword) return
@@ -32,6 +33,11 @@ function recordHybridSearchEvent(event) {
   const sourceKey = event.source
   if (Object.prototype.hasOwnProperty.call(state.sourceCounts, sourceKey)) {
     state.sourceCounts[sourceKey] += 1
+  }
+
+  const localBefore = event.localCountBeforeFallback ?? 0
+  if (localBefore > 0) {
+    state.localHasResults += 1
   }
 
   if (event.fallbackTriggered) {
@@ -49,7 +55,12 @@ function getHybridSearchMetricsSnapshot() {
   return {
     ...state,
     rates: {
+      /** 未触发 TMDB 回退的请求占比（本地结果数已达阈值） */
+      localOnlyRatePercent: pct(state.localOnlyResponses, requests),
+      /** @deprecated 与 localOnlyRatePercent 同义，保留兼容 */
       localHitRatePercent: pct(state.localOnlyResponses, requests),
+      /** 回退前本地至少命中 1 条的请求占比 */
+      localHasResultsRatePercent: pct(state.localHasResults, requests),
       fallbackTriggerRatePercent: pct(state.fallbackTriggered, requests),
       persistEfficiencyPercent: pct(state.tmdbPersistedTotal, state.tmdbFetchedTotal),
     },

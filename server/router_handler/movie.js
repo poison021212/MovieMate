@@ -206,6 +206,7 @@ exports.getMovies = async (req, res) => {
     const queryCtx = buildQueryContext(req.query)
     const useHybrid = req.query.hybrid === '1'
     let pageResult = await queryMoviesPage(queryCtx)
+    const localCountBeforeFallback = pageResult.data.length
     let source = 'local'
     let tmdbFetched = 0
     let tmdbPersisted = 0
@@ -241,6 +242,7 @@ exports.getMovies = async (req, res) => {
         source,
         tmdbFetched,
         tmdbPersisted,
+        localCountBeforeFallback,
       })
     }
 
@@ -260,6 +262,7 @@ exports.getMovies = async (req, res) => {
           source,
           hybrid: useHybrid,
           fallbackTriggered,
+          localCountBeforeFallback,
           tmdbFetched,
           tmdbPersisted,
           ...(metricsSnapshot ? { aggregate: metricsSnapshot.rates } : {}),

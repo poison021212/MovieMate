@@ -232,11 +232,11 @@ const MovieList = () => {
           style={{ marginTop: 16 }}
           message={`本次来源：${meta.source}${
             meta.fallbackTriggered
-              ? `（TMDB 回退：抓取 ${meta.tmdbFetched} 条，写回 ${meta.tmdbPersisted} 条）`
-              : '（本地命中，未触发回退）'
+              ? `（本地先命中 ${meta.localCountBeforeFallback ?? 0} 条；TMDB 回退：抓取 ${meta.tmdbFetched} 条，写回 ${meta.tmdbPersisted} 条）`
+              : `（本地命中 ${meta.localCountBeforeFallback ?? 0} 条，未触发回退）`
           }${
             aggregate
-              ? ` | 累计本地命中率 ${aggregate.localHitRatePercent}% ，回退触发率 ${aggregate.fallbackTriggerRatePercent}%`
+              ? ` | 累计：本地有结果 ${aggregate.localHasResultsRatePercent ?? 0}% ，未触发回退 ${aggregate.localOnlyRatePercent ?? aggregate.localHitRatePercent ?? 0}% ，回退触发 ${aggregate.fallbackTriggerRatePercent}%`
               : ''
           }`}
         />
@@ -256,8 +256,19 @@ const MovieList = () => {
                   </Col>
                   <Col xs={12} sm={8}>
                     <Statistic
-                      title="本地命中率"
-                      value={hybridStats.rates?.localHitRatePercent ?? 0}
+                      title="本地有结果率"
+                      value={hybridStats.rates?.localHasResultsRatePercent ?? 0}
+                      suffix="%"
+                    />
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <Statistic
+                      title="未触发回退率"
+                      value={
+                        hybridStats.rates?.localOnlyRatePercent ??
+                        hybridStats.rates?.localHitRatePercent ??
+                        0
+                      }
                       suffix="%"
                     />
                   </Col>

@@ -242,7 +242,7 @@ const MovieList = () => {
         />
       )}
 
-      {hybridStats && (
+      {hybridStats && searchTerm && (
         <Collapse
           style={{ marginTop: 12 }}
           items={[

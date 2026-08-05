@@ -69,6 +69,10 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 
 `GET /api/movies/hybrid-stats` 返回自进程启动以来的累计计数与比率，用于观察本地命中率与 TMDB fallback 成本（Demo 环境内存统计，生产应改为持久化或日志系统）。
 
+**前端展示**：仅在用户输入关键词（`searchTerm` 非空）时显示「本次来源」提示与 Hybrid 观测折叠面板；点击「重置筛选」清空关键词后隐藏，避免将服务端累计值误读为当前列表状态。累计计数本身不随重置清零（重启后端进程清零）。
+
+**关键词请求数口径**：`hybridKeywordRequests` 统计的是满足 `hybrid=1` 且带 `q` 的 `GET /api/movies` **HTTP 请求次数**，不是「点击搜索按钮」次数。同一关键词下改排序/筛选/分页、刷新页面等会再次请求并各计 1 次；单次请求内部的 TMDB 回写与二次查本地不会额外 +1。
+
 ### URL 同步（前端）
 
 首页将 `page`、`pageSize`、`q`、`sortBy`、`sortOrder`、`minRating`、`year`、`genre` 写入 location search（默认值省略），刷新后恢复。
@@ -92,7 +96,8 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 - [ ] 翻页、改 `pageSize` 行为正确；
 - [ ] 搜索 + 筛选 + 排序组合有效；
 - [ ] URL 刷新后条件保留；
-- [ ] 重置后 URL 与列表恢复默认。
+- [ ] 重置后 URL 与列表恢复默认；
+- [ ] 重置后无关键词时不展示 Hybrid 来源提示与观测面板；有关键词时再展示。
 
 ## 8. 实现位置
 

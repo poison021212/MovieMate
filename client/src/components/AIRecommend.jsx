@@ -85,6 +85,7 @@ const AIRecommend = () => {
   const [chatInput, setChatInput] = useState('');
   const [chatMovies, setChatMovies] = useState([]);
   const [lastChatMode, setLastChatMode] = useState(null);
+  const [pendingUserMessage, setPendingUserMessage] = useState(null);
   const chatEndRef = useRef(null);
   const shouldAutoScrollRef = useRef(false);
   const messagesLenAtSendRef = useRef(0);
@@ -120,11 +121,14 @@ const AIRecommend = () => {
 
   useEffect(() => {
     if (!shouldAutoScrollRef.current) return;
-    if (chatLoading) return;
-    if (messages.length <= messagesLenAtSendRef.current) return;
+    const messagesUpdated = messages.length > messagesLenAtSendRef.current;
+    if (!pendingUserMessage && chatLoading) return;
+    if (!pendingUserMessage && !messagesUpdated) return;
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    shouldAutoScrollRef.current = false;
-  }, [messages, chatLoading]);
+    if (messagesUpdated && !chatLoading) {
+      shouldAutoScrollRef.current = false;
+    }
+  }, [messages, chatLoading, pendingUserMessage]);
 
   const goToAuth = () => {
     navigate('/auth', { state: { from: location } });
@@ -190,6 +194,7 @@ const AIRecommend = () => {
     if (!text) return;
     const draft = text;
     setChatInput('');
+    setPendingUserMessage(draft);
     shouldAutoScrollRef.current = true;
     messagesLenAtSendRef.current = messages.length;
     try {
@@ -197,10 +202,12 @@ const AIRecommend = () => {
         sessionId: activeSessionId || undefined,
         message: draft,
       }).unwrap();
+      setPendingUserMessage(null);
       setActiveSessionId(result.sessionId);
       setChatMovies(result.movies || []);
       setLastChatMode(result.meta?.mode || null);
     } catch (err) {
+      setPendingUserMessage(null);
       setChatInput(draft);
       shouldAutoScrollRef.current = false;
       message.error(err?.data?.error?.message || '发送失败');
@@ -319,7 +326,16 @@ const AIRecommend = () => {
                       )}
                     </div>
                   ))}
-                  {chatLoading && <Spin size="small" />}
+                  {pendingUserMessage && (
+                    <div style={{ marginBottom: 12, textAlign: 'right' }}>
+                      <Tag color="blue">我</Tag>
+                      <div style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>{pendingUserMessage}</div>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        发送中…
+                      </Text>
+                    </div>
+                  )}
+                  {chatLoading && !pendingUserMessage && <Spin size="small" />}
                   <div ref={chatEndRef} />
                 </div>
                 <TextArea

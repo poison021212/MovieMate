@@ -62,7 +62,7 @@ const Layout = (props) => {
           </Menu.Item>
           {!auth.isLogin && (
             <Menu.Item key="auth" icon={<UserOutlined />} style={{ marginLeft: 'auto' }}>
-              <Link to="/auth">登录/注册</Link>
+              <Link to="/auth" state={{ from: location }}>登录/注册</Link>
             </Menu.Item>
           )}
           {auth.isLogin &&
@@ -80,8 +80,8 @@ const Layout = (props) => {
               <Menu.Item key="auth" icon={<UserOutlined />} style={{ marginLeft: 'auto' }}>
                 <Link to="/profile">{auth.userInfo?.username || '个人中心'}</Link>
               </Menu.Item>
-              <Menu.Item key="logout" icon={<LogoutOutlined />} >
-                <Link to="/" onClick={logoutConfirm}>退出</Link>
+              <Menu.Item key="logout" icon={<LogoutOutlined />} onClick={logoutConfirm}>
+                退出
               </Menu.Item>
             </>}
         </Menu>

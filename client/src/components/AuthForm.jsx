@@ -11,7 +11,10 @@ const AuthForm = () => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const location = useLocation()
-  const from = location.state?.from?.pathname || '/'
+  const fromLocation = location.state?.from
+  const redirectTo = fromLocation
+    ? `${fromLocation.pathname || '/'}${fromLocation.search || ''}${fromLocation.hash || ''}`
+    : '/'
 
   const [isLoginForm, setIsLoginForm] = useState(true)
   const [showRegisterSuccess, setShowRegisterSuccess] = useState(false)
@@ -34,7 +37,7 @@ const AuthForm = () => {
         }))
         setShowLoginSuccess(true)
         setTimeout(() => {
-          navigate(from, { replace: true })
+          navigate(redirectTo, { replace: true })
         }, 1000)
       }
     } else {

@@ -1,6 +1,7 @@
 import React from 'react'
 import { App as AntdApp } from 'antd'
 import { Routes, Route } from 'react-router-dom'
+import ScrollToTopOnRouteChange from '@/components/ScrollToTopOnRouteChange'
 import MoviePage from '@/pages/MoviePage'
 import MovieDetail from '@/pages/MovieDetailsPage'
 import ProfilePage from '@/pages/ProfilePage'
@@ -16,6 +17,7 @@ function App() {
   useAutoLogout()
   return (
     <AntdApp>
+      <ScrollToTopOnRouteChange />
       <Layout>
         <Routes>
           <Route path="/" element={<MoviePage />} />

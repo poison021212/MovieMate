@@ -121,6 +121,7 @@ const AIRecommend = () => {
   useEffect(() => {
     if (!shouldAutoScrollRef.current) return;
     if (chatLoading) return;
+    if (messages.length <= messagesLenAtSendRef.current) return;
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     shouldAutoScrollRef.current = false;
   }, [messages, chatLoading]);
@@ -190,6 +191,7 @@ const AIRecommend = () => {
     const draft = text;
     setChatInput('');
     shouldAutoScrollRef.current = true;
+    messagesLenAtSendRef.current = messages.length;
     try {
       const result = await recommendChat({
         sessionId: activeSessionId || undefined,

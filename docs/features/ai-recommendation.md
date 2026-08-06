@@ -2,7 +2,7 @@
 
 - 状态：已实现（受控半 Agent + 多轮会话 v1）
 - 负责人：MovieMate 维护者
-- 最后核对日期：2026-08-04
+- 最后核对日期：2026-08-06
 
 ## 1. 目标
 
@@ -20,8 +20,12 @@
 
 1. 进入 `/ai-recommend`，左栏自动加载 `profile-feed`；
 2. 登录后右栏选择或新建会话，多轮描述偏好；
-3. 对话返回自然语言 + 结构化电影列表；左栏可展示最近一次对话推荐；
-4. 卡片「详情 / 笔记」跳转站内（同 v1 闭环）。
+3. 登录后右栏选择或新建会话，多轮描述偏好；
+4. 对话返回自然语言 + 结构化电影列表；左栏可展示最近一次对话推荐；
+5. 未登录从 AI 页跳转登录时携带 `state.from`，登录成功后回到 `/ai-recommend`（或原路径）；
+6. 发送消息时输入框**立即清空**；若本轮请求失败则**回填**原文；
+7. 切换历史会话时聊天区**不自动滚到底**，仅在当前用户发送并完成本轮回复后滚到最新；
+8. 手动「新会话」标题默认为「新会话」，**首条消息成功后**自动改为首问截断标题。
 
 ## 4. 前后端契约
 
@@ -44,12 +48,15 @@
   "assistantMessage": "根据你的偏好…",
   "movies": [],
   "meta": {
+    "mode": "recommend",
     "candidateCount": 30,
     "groundedCount": 4,
     "toolsUsed": ["tool_readTasteProfile", "tool_fetchTmdbCandidates", "tool_groundAndMapLocal"]
   }
 }
 ```
+
+`meta.mode`：`recommend`（候选池推荐，默认）或 `qa`（受控电影问答，`movies` 常为空）。问答模式仅使用站内 LIKE 检索 + TMDB 搜索/详情组装的资料块，**不是**全 Agent 开放式检索。
 
 错误码与单轮一致：503（候选空）、422（校验失败）、400（参数）。
 
@@ -62,8 +69,13 @@ sequenceDiagram
   participant Tools
   participant LLM
   User->>API: POST /recommend/chat
+  API->>API: detectChatMode(recommend|qa)
   API->>Tools: readTasteProfile
-  API->>Tools: fetchTmdbCandidates
+  alt recommend
+    API->>Tools: fetchTmdbCandidates
+  else qa
+    API->>Tools: localSearch+tmdbSearch+detail
+  end
   API->>LLM: system+history+user
   LLM-->>API: JSON reply+movies
   API->>Tools: groundAndMapLocal
@@ -72,7 +84,7 @@ sequenceDiagram
 ```
 
 - 模型输出经 `chatResponse_schema`（Joi）校验，失败自动重试 1 次。
-- 电影条目仍与候选池比对过滤。
+- 推荐模式：电影条目与候选池比对过滤；问答模式：回答须基于资料块，不展示模型推理链（前端仍为加载 Spin）。
 
 ## 6. 数据表
 

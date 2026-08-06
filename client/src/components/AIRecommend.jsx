@@ -15,7 +15,7 @@ import {
   Modal,
   Image,
 } from 'antd';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
   useGetProfileFeedQuery,
@@ -79,11 +79,16 @@ function MovieCard({ movie, onDetail }) {
 
 const AIRecommend = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const auth = useSelector((state) => state.auth);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [chatInput, setChatInput] = useState('');
   const [chatMovies, setChatMovies] = useState([]);
+  const [lastChatMode, setLastChatMode] = useState(null);
   const chatEndRef = useRef(null);
+  const shouldAutoScrollRef = useRef(false);
+  const messagesLenAtSendRef = useRef(0);
+  const chatScrollContainerRef = useRef(null);
 
   const { data: profileData, isLoading: profileLoading } = useGetProfileFeedQuery();
   const { data: sessionsData, isLoading: sessionsLoading } = useListAiSessionsQuery(undefined, {
@@ -114,8 +119,23 @@ const AIRecommend = () => {
   }, [auth.isLogin, sessions, activeSessionId]);
 
   useEffect(() => {
+    if (!shouldAutoScrollRef.current) return;
+    if (chatLoading) return;
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    shouldAutoScrollRef.current = false;
   }, [messages, chatLoading]);
+
+  const goToAuth = () => {
+    navigate('/auth', { state: { from: location } });
+  };
+
+  const handleSelectSession = (sessionId) => {
+    shouldAutoScrollRef.current = false;
+    setActiveSessionId(sessionId);
+    if (chatScrollContainerRef.current) {
+      chatScrollContainerRef.current.scrollTop = 0;
+    }
+  };
 
   const goDetail = (movie) => {
     const localId = movie.local_movie_id;
@@ -162,20 +182,25 @@ const AIRecommend = () => {
   const handleSendChat = async () => {
     if (!auth.isLogin) {
       message.warning('请先登录后使用 AI 对话');
-      navigate('/auth');
+      goToAuth();
       return;
     }
     const text = chatInput.trim();
     if (!text) return;
+    const draft = text;
+    setChatInput('');
+    shouldAutoScrollRef.current = true;
     try {
       const result = await recommendChat({
         sessionId: activeSessionId || undefined,
-        message: text,
+        message: draft,
       }).unwrap();
       setActiveSessionId(result.sessionId);
       setChatMovies(result.movies || []);
-      setChatInput('');
+      setLastChatMode(result.meta?.mode || null);
     } catch (err) {
+      setChatInput(draft);
+      shouldAutoScrollRef.current = false;
       message.error(err?.data?.error?.message || '发送失败');
     }
   };
@@ -242,7 +267,7 @@ const AIRecommend = () => {
           >
             {!auth.isLogin ? (
               <Empty description="登录后可多轮对话并保存会话">
-                <Button type="primary" onClick={() => navigate('/auth')}>
+                <Button type="primary" onClick={goToAuth}>
                   去登录
                 </Button>
               </Empty>
@@ -252,9 +277,15 @@ const AIRecommend = () => {
                   sessions={sessions}
                   loading={sessionsLoading}
                   activeId={activeSessionId}
-                  onSelect={setActiveSessionId}
+                  onSelect={handleSelectSession}
                 />
+                {lastChatMode && (
+                  <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+                    上一轮模式：{lastChatMode === 'qa' ? '电影问答' : '推荐'}
+                  </Text>
+                )}
                 <div
+                  ref={chatScrollContainerRef}
                   style={{
                     height: 360,
                     overflowY: 'auto',

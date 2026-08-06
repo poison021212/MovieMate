@@ -72,13 +72,16 @@ exports.postRecommendChat = async (req, res) => {
   let sessionId = req.body.sessionId ? Number(req.body.sessionId) : null
   const username = req.user.username
 
+  const titleFromMessage = (text) => text.slice(0, 24) + (text.length > 24 ? '…' : '')
+
   try {
+    let sessionRecord = null
     if (sessionId) {
-      const session = await sessionStore.getSessionForUser(username, sessionId)
-      if (!session) return res.cc('会话不存在', 404)
+      sessionRecord = await sessionStore.getSessionForUser(username, sessionId)
+      if (!sessionRecord) return res.cc('会话不存在', 404)
     } else {
-      const title = message.slice(0, 24) + (message.length > 24 ? '…' : '')
-      sessionId = await sessionStore.createSession(username, title)
+      sessionId = await sessionStore.createSession(username, titleFromMessage(message))
+      sessionRecord = { title: titleFromMessage(message) }
     }
 
     const history = await sessionStore.listMessages(sessionId)
@@ -99,7 +102,12 @@ exports.postRecommendChat = async (req, res) => {
       result.movies,
       result.meta
     )
-    await sessionStore.touchSession(sessionId)
+    const shouldRenameDefaultSession =
+      sessionRecord?.title === '新会话' && history.length === 0
+    await sessionStore.touchSession(
+      sessionId,
+      shouldRenameDefaultSession ? titleFromMessage(message) : null
+    )
 
     res.json({
       success: true,

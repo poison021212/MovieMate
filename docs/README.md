@@ -13,6 +13,7 @@
 | [ai-recommendation.md](features/ai-recommendation.md) | AI 电影推荐 |
 | [tmdb-sync.md](features/tmdb-sync.md) | TMDB 数据同步脚本 |
 | [runtime-and-config.md](features/runtime-and-config.md) | 环境、启动、数据库与故障排查 |
+| [auth-security.md](features/auth-security.md) | 登录注册、邮箱验证、会话与密码找回 |
 | [preview-change-summary-2026-08-04.md](features/preview-change-summary-2026-08-04.md) | 本轮改动汇总与 Preview 指南 |
 
 ## 协作规范

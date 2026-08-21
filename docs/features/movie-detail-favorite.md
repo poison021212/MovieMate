@@ -38,10 +38,11 @@
 | 添加收藏 | `POST /api/favorites` | `{ data: { movieId, username } }` | 成功消息 + 新记录 |
 | 取消收藏 | `DELETE /api/favorites/:id` | 路径为收藏记录 id | 204 |
 
-注册/登录（Strapi 兼容路径）：
+注册/登录（详见 [auth-security.md](auth-security.md)）：
 
-- `POST /api/auth/local/register` — `{ username, password, email }`
-- `POST /api/auth/local` — `{ identifier, password }` 返回 `{ jwt, user }`
+- `POST /api/auth/local/register` — 强密码 + 邮箱；注册后需验证邮箱
+- `POST /api/auth/local` — `{ identifier, password }`（用户名或邮箱）；返回 access + refresh token
+- `POST /api/auth/verify-email`、`/auth/forgot-password`、`/auth/reset-password`、`/auth/refresh`
 
 ## 6. 数据边界
 

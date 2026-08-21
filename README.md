@@ -83,8 +83,11 @@ copy server\.env.example server\.env
 |------|------|
 | `DB_HOST` / `DB_USER` / `DB_PASS` / `DB_NAME` | 与 MySQL 一致，`DB_NAME` 默认为 `movie_db` |
 | `JWT_SECRET` | 任意足够长的随机字符串 |
+| `APP_PUBLIC_URL` | 邮箱验证/重置链接前缀，默认 `http://localhost:5173` |
 
 AI 推荐功能需额外配置 `TMDB_ACCESS_TOKEN` 与 `DASHSCOPE_API_KEY`，不配置时其余页面仍可正常使用。
+
+认证升级（已有库）：`mysql -u root -p movie_db < server/sql/auth_upgrade.sql`。详见 [auth-security.md](docs/features/auth-security.md)。
 
 ### 4. 启动
 

@@ -1,16 +1,10 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import { createApi } from '@reduxjs/toolkit/query/react'
+import createBaseQueryWithReauth from './baseQueryWithReauth'
 
 const vercelApi = createApi({
   reducerPath: 'vercelApi',
   tagTypes: ['AiSessions', 'AiMessages', 'ProfileFeed'],
-  baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_API_URL || '/',
-    prepareHeaders: (headers) => {
-      const token = localStorage.getItem('token')
-      if (token) headers.set('Authorization', `Bearer ${token}`)
-      return headers
-    },
-  }),
+  baseQuery: createBaseQueryWithReauth(import.meta.env.VITE_API_URL || '/'),
   endpoints: (builder) => ({
     recommendMovies: builder.mutation({
       query: (prompt) => ({

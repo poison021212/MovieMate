@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
   username VARCHAR(15) NOT NULL UNIQUE,
   email VARCHAR(255) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
+  email_verified TINYINT(1) NOT NULL DEFAULT 0,
+  status ENUM('active', 'locked', 'banned') NOT NULL DEFAULT 'active',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

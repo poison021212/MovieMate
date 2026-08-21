@@ -1,18 +1,10 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import { createApi } from '@reduxjs/toolkit/query/react'
+import baseQueryWithReauth from './baseQueryWithReauth'
 
 const reviewApi = createApi({
   reducerPath: 'reviewApi',
   tagTypes: ['Review', 'Reply'],
-  baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:1337/api',
-    prepareHeaders: (headers) => {
-      const token = localStorage.getItem('token')
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`)
-      }
-      return headers
-    },
-  }),
+  baseQuery: baseQueryWithReauth,
   endpoints(builder) {
     return {
       addReview: builder.mutation({

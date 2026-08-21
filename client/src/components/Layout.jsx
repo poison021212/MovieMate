@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux';
 import { useLocation } from 'react-router-dom';
 import { logout } from '@/store/Slice/authSlice';
+import { useLogoutMutation } from '@/store/API/authApi';
 
 const { Header, Content } = AntLayout;
 
@@ -12,6 +13,7 @@ const Layout = (props) => {
   const auth = useSelector(state => state.auth)
   const dispatch = useDispatch()
   const location = useLocation()
+  const [logoutApi] = useLogoutMutation()
   const getSelectedKey = () => {
     const path = location.pathname
     if (path === '/') return 'home'
@@ -40,7 +42,18 @@ const Layout = (props) => {
       content: "退出后需要重新登录",
       cancelText: "取消",
       okText: "确定",
-      onOk: () => { dispatch(logout()) }
+      onOk: async () => {
+        try {
+          if (auth.isLogin) {
+            await logoutApi({
+              refreshToken: auth.refreshToken || localStorage.getItem('refreshToken'),
+            }).unwrap()
+          }
+        } catch {
+          /* still clear local session */
+        }
+        dispatch(logout())
+      }
     })
   }
 

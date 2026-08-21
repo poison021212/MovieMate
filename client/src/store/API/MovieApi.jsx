@@ -1,4 +1,5 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import { createApi } from '@reduxjs/toolkit/query/react'
+import createBaseQueryWithReauth from './baseQueryWithReauth'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:1337/api'
 const ORIGIN_BASE = API_BASE.replace('/api', '')
@@ -33,7 +34,7 @@ function normalizePoster(poster) {
 
 const MovieApi = createApi({
   reducerPath: 'movieApi',
-  baseQuery: fetchBaseQuery({ baseUrl: API_BASE }),
+  baseQuery: createBaseQueryWithReauth(API_BASE),
   endpoints: (builder) => ({
     getMovies: builder.query({
       query: ({

@@ -1,11 +1,15 @@
 import React from 'react'
 import { useState } from 'react'
-import { useRegisterMutation, useLoginMutation } from '@/store/API/authApi'
+import {
+  useRegisterMutation,
+  useLoginMutation,
+  useResendVerificationMutation,
+} from '@/store/API/authApi'
 import { useDispatch } from 'react-redux'
 import { loginSuccess } from '@/store/Slice/authSlice'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { LockOutlined, UserOutlined, MailOutlined } from '@ant-design/icons';
-import { Button, Checkbox, Flex, Form, Input, Alert } from 'antd';
+import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { LockOutlined, UserOutlined, MailOutlined } from '@ant-design/icons'
+import { Button, Form, Input, Alert, message } from 'antd'
 
 const AuthForm = () => {
   const dispatch = useDispatch()
@@ -17,86 +21,124 @@ const AuthForm = () => {
     : '/'
 
   const [isLoginForm, setIsLoginForm] = useState(true)
-  const [showRegisterSuccess, setShowRegisterSuccess] = useState(false)
-  const [showLoginSuccess, setShowLoginSuccess] = useState(false)
+  const [registerEmailHint, setRegisterEmailHint] = useState('')
+  const [pendingVerifyEmail, setPendingVerifyEmail] = useState('')
 
   const [regFn, { error: registerError }] = useRegisterMutation()
   const [loginFn, { error: loginError }] = useLoginMutation()
+  const [resendVerification, { isLoading: resendLoading }] = useResendVerificationMutation()
 
   const onFinish = async (values) => {
     if (isLoginForm) {
       const result = await loginFn({
         identifier: values.username,
-        password: values.password
+        password: values.password,
       })
-      console.log(result)
       if (!result.error) {
-        dispatch(loginSuccess({
-          token: result.data.jwt,
-          userInfo: result.data.user
-        }))
-        setShowLoginSuccess(true)
-        setTimeout(() => {
-          navigate(redirectTo, { replace: true })
-        }, 1000)
+        dispatch(
+          loginSuccess({
+            token: result.data.accessToken || result.data.jwt,
+            refreshToken: result.data.refreshToken,
+            userInfo: result.data.user,
+            expiresIn: result.data.expiresIn,
+          })
+        )
+        message.success('登录成功')
+        navigate(redirectTo, { replace: true })
+      } else {
+        const msg = result.error?.data?.error?.message || ''
+        if (msg.includes('邮箱尚未验证')) {
+          setPendingVerifyEmail(values.username.includes('@') ? values.username : '')
+        }
       }
     } else {
       const result = await regFn({
         username: values.username,
         password: values.password,
-        email: values.email
+        email: values.email.trim().toLowerCase(),
       })
       if (!result.error) {
-        setShowRegisterSuccess(true)
-        setTimeout(() => {
-          setIsLoginForm(true)
-          setShowRegisterSuccess(false)
-        }, 2000)
+        setRegisterEmailHint(values.email)
+        setPendingVerifyEmail(values.email.trim().toLowerCase())
+        setIsLoginForm(true)
+        message.success('注册成功，请验证邮箱后登录')
       }
+    }
+  }
+
+  const handleResend = async () => {
+    const email = pendingVerifyEmail || registerEmailHint
+    if (!email || !email.includes('@')) {
+      message.warning('请先使用注册邮箱登录一次，或在注册时填写邮箱')
+      return
+    }
+    try {
+      await resendVerification({ email }).unwrap()
+      message.success('验证邮件已发送（Demo 请查看后端控制台）')
+    } catch (err) {
+      message.error(err?.data?.error?.message || '发送失败')
     }
   }
 
   const switchFormHandler = () => {
     setIsLoginForm(!isLoginForm)
-    setShowRegisterSuccess(false)
-    setShowLoginSuccess(false)
+    setRegisterEmailHint('')
   }
 
   return (
     <div>
       <Form
         name="auth"
-        initialValues={{ remember: false }}
         style={{ maxWidth: 360, margin: '1.33rem auto' }}
         onFinish={onFinish}
       >
         <Form.Item
           name="username"
-          rules={[{ required: true, message: '请输入用户名' }]}
+          rules={[{ required: true, message: isLoginForm ? '请输入用户名或邮箱' : '请输入用户名' }]}
         >
-          <Input prefix={<UserOutlined />} placeholder="请输入用户名" />
+          <Input
+            prefix={<UserOutlined />}
+            placeholder={isLoginForm ? '用户名或邮箱' : '请输入用户名'}
+          />
         </Form.Item>
         <Form.Item
           name="password"
-          rules={[{ required: true, message: '请输入密码' }]}
+          rules={[
+            { required: true, message: '请输入密码' },
+            ...(!isLoginForm
+              ? [
+                  {
+                    pattern: /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9_!@#$%^&*.-]{8,32}$/,
+                    message: '密码需 8-32 位且包含字母与数字',
+                  },
+                ]
+              : []),
+          ]}
         >
           <Input prefix={<LockOutlined />} type="password" placeholder="请输入密码" />
         </Form.Item>
         {!isLoginForm && (
           <Form.Item
             name="email"
-            rules={[{ required: true, message: '请输入邮箱' }]}
+            rules={[{ required: true, type: 'email', message: '请输入有效邮箱' }]}
           >
             <Input prefix={<MailOutlined />} placeholder="请输入邮箱" />
           </Form.Item>
         )}
         <Form.Item>
-
-          {/* <Form.Item name="remember" valuePropName="checked" noStyle>
-              <Checkbox>记住密码</Checkbox>
-            </Form.Item> */}
-
-          <a href='#' style={{ float: 'right' }} onClick={(e) => { e.preventDefault(); switchFormHandler() }}>
+          {isLoginForm && (
+            <Link to="/auth/forgot-password" style={{ float: 'left' }}>
+              忘记密码？
+            </Link>
+          )}
+          <a
+            href="#"
+            style={{ float: 'right' }}
+            onClick={(e) => {
+              e.preventDefault()
+              switchFormHandler()
+            }}
+          >
             {isLoginForm ? '没有账号？去注册' : '已经有账号？去登录'}
           </a>
         </Form.Item>
@@ -105,39 +147,47 @@ const AuthForm = () => {
             {!isLoginForm ? '注册' : '登录'}
           </Button>
         </Form.Item>
-        {showRegisterSuccess && (
+
+        {registerEmailHint && (
           <Alert
-            message="注册成功"
-            description="恭喜您，注册成功！"
-            type="success"
+            type="info"
             showIcon
-            closable
-            onClose={() => setShowRegisterSuccess(false)}
+            message="请验证邮箱"
+            description={`已向 ${registerEmailHint} 发送验证链接（Demo 环境请查看后端控制台日志）。验证后再登录。`}
+            style={{ marginBottom: 12 }}
           />
         )}
+
+        {pendingVerifyEmail && isLoginForm && (
+          <Alert
+            type="warning"
+            showIcon
+            message="邮箱未验证"
+            description={
+              <span>
+                可重新发送验证邮件。
+                <Button type="link" size="small" loading={resendLoading} onClick={handleResend}>
+                  重发验证邮件
+                </Button>
+              </span>
+            }
+            style={{ marginBottom: 12 }}
+          />
+        )}
+
         {registerError && !isLoginForm && (
           <Alert
             message="注册失败"
-            description={registerError.message || '注册失败，请检查用户名或电子邮件是否已存在'}
+            description={registerError.data?.error?.message || registerError.message || '注册失败'}
             type="error"
             showIcon
             closable
           />
         )}
-        {showLoginSuccess && (
-          <Alert
-            title="登录成功"
-            description="登录成功！即将跳转..."
-            type="success"
-            showIcon
-            closable
-            onClose={() => setShowLoginSuccess(false)}
-          />
-        )}
         {loginError && isLoginForm && (
           <Alert
             title="登录失败"
-            description={loginError.message || '登录失败，请检查用户名或密码是否正确'}
+            description={loginError.data?.error?.message || loginError.message || '登录失败'}
             type="error"
             showIcon
             closable

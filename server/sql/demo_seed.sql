@@ -3,16 +3,20 @@
 
 USE movie_db;
 
-INSERT INTO users (username, email, password, created_at)
+INSERT INTO users (username, email, password, email_verified, status, created_at)
 VALUES (
   'demo_user',
   'demo_user@moviemate.local',
   '$2b$10$Gx4qovKYVfTmJmdzDbt2GuEY9PHbGwDrD6nKjyP95ywYNJ/vzVas.',
+  1,
+  'active',
   NOW()
 )
 ON DUPLICATE KEY UPDATE
   email = VALUES(email),
-  password = VALUES(password);
+  password = VALUES(password),
+  email_verified = 1,
+  status = 'active';
 
 INSERT INTO favorites (username, movieId)
 SELECT 'demo_user', m.id

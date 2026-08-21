@@ -24,9 +24,14 @@ const AuthForm = () => {
   const [registerEmailHint, setRegisterEmailHint] = useState('')
   const [pendingVerifyEmail, setPendingVerifyEmail] = useState('')
 
-  const [regFn, { error: registerError }] = useRegisterMutation()
-  const [loginFn, { error: loginError }] = useLoginMutation()
+  const [regFn, { error: registerError, reset: resetRegister }] = useRegisterMutation()
+  const [loginFn, { error: loginError, reset: resetLogin }] = useLoginMutation()
   const [resendVerification, { isLoading: resendLoading }] = useResendVerificationMutation()
+
+  const clearAuthAlerts = () => {
+    setRegisterEmailHint('')
+    setPendingVerifyEmail('')
+  }
 
   const onFinish = async (values) => {
     if (isLoginForm) {
@@ -48,7 +53,14 @@ const AuthForm = () => {
       } else {
         const msg = result.error?.data?.error?.message || ''
         if (msg.includes('邮箱尚未验证')) {
-          setPendingVerifyEmail(values.username.includes('@') ? values.username : '')
+          const email = values.username.includes('@')
+            ? values.username.trim().toLowerCase()
+            : registerEmailHint
+          if (email) {
+            setRegisterEmailHint('')
+            setPendingVerifyEmail(email)
+          }
+          resetLogin()
         }
       }
     } else {
@@ -58,8 +70,11 @@ const AuthForm = () => {
         email: values.email.trim().toLowerCase(),
       })
       if (!result.error) {
-        setRegisterEmailHint(values.email)
-        setPendingVerifyEmail(values.email.trim().toLowerCase())
+        const email = values.email.trim().toLowerCase()
+        setRegisterEmailHint(email)
+        setPendingVerifyEmail('')
+        resetLogin()
+        resetRegister()
         setIsLoginForm(true)
         message.success('注册成功，请验证邮箱后登录')
       }
@@ -69,7 +84,7 @@ const AuthForm = () => {
   const handleResend = async () => {
     const email = pendingVerifyEmail || registerEmailHint
     if (!email || !email.includes('@')) {
-      message.warning('请先使用注册邮箱登录一次，或在注册时填写邮箱')
+      message.warning('无法识别邮箱，请使用注册时的邮箱地址')
       return
     }
     try {
@@ -81,9 +96,14 @@ const AuthForm = () => {
   }
 
   const switchFormHandler = () => {
+    resetLogin()
+    resetRegister()
+    clearAuthAlerts()
     setIsLoginForm(!isLoginForm)
-    setRegisterEmailHint('')
   }
+
+  const showLoginError =
+    isLoginForm && loginError && !registerEmailHint && !pendingVerifyEmail
 
   return (
     <div>
@@ -153,19 +173,27 @@ const AuthForm = () => {
             type="info"
             showIcon
             message="请验证邮箱"
-            description={`已向 ${registerEmailHint} 发送验证链接（Demo 环境请查看后端控制台日志）。验证后再登录。`}
+            description={
+              <span>
+                已向 {registerEmailHint} 发送验证链接。Demo 环境请在后端控制台复制
+                「邮箱验证链接」并在浏览器打开，验证完成后再登录。
+                <Button type="link" size="small" loading={resendLoading} onClick={handleResend}>
+                  重发验证邮件
+                </Button>
+              </span>
+            }
             style={{ marginBottom: 12 }}
           />
         )}
 
-        {pendingVerifyEmail && isLoginForm && (
+        {pendingVerifyEmail && isLoginForm && !registerEmailHint && (
           <Alert
             type="warning"
             showIcon
-            message="邮箱未验证"
+            message="邮箱尚未验证"
             description={
               <span>
-                可重新发送验证邮件。
+                请先完成邮箱验证后再登录。
                 <Button type="link" size="small" loading={resendLoading} onClick={handleResend}>
                   重发验证邮件
                 </Button>
@@ -184,7 +212,7 @@ const AuthForm = () => {
             closable
           />
         )}
-        {loginError && isLoginForm && (
+        {showLoginError && (
           <Alert
             title="登录失败"
             description={loginError.data?.error?.message || loginError.message || '登录失败'}

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Row, Col, Input, Pagination, Select, Space, Button, InputNumber, Alert, Collapse, Statistic } from 'antd'
 import MovieCard from './MovieCard'
 import { useGetMoviesQuery, useGetHybridSearchStatsQuery } from '@/store/API/MovieApi'
+import { formatQueryError } from '@/utils/formatQueryError'
 
 const { Search } = Input
 
@@ -139,7 +140,17 @@ const MovieList = () => {
   const aggregate = meta?.aggregate || hybridStats?.rates
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: 60 }}>加载中...</div>
-  if (isError) return <div style={{ color: 'red' }}>错误: {error?.status || '请求失败'}</div>
+  if (isError) {
+    return (
+      <Alert
+        type="error"
+        showIcon
+        message="电影列表加载失败"
+        description={formatQueryError(error)}
+        style={{ margin: 24 }}
+      />
+    )
+  }
 
   return (
     <div style={{ padding: 24 }}>

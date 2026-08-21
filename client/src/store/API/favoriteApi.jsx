@@ -1,9 +1,10 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
-import createBaseQueryWithReauth from './baseQueryWithReauth'
+import { createBaseQueryWithReauth } from './baseQueryWithReauth'
+import { API_BASE } from './apiBase'
 
 const favoriteApi = createApi({
   reducerPath: 'favoriteApi',
-  baseQuery: createBaseQueryWithReauth(import.meta.env.VITE_API_URL || 'http://localhost:1337/api'),
+  baseQuery: createBaseQueryWithReauth(API_BASE),
   endpoints: (builder) => ({
     getFavorite: builder.query({
       query: () => 'favorites',

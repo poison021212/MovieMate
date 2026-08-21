@@ -11,8 +11,11 @@ export default defineConfig({
     }
   },
   server: {
+    // Listen on IPv4 + IPv6 so http://127.0.0.1:5173 works on Windows
+    host: true,
     proxy: {
-      '/api': 'http://localhost:1337'
-    }
-  }
+      '/api': 'http://localhost:1337',
+      '/uploads': 'http://localhost:1337',
+    },
+  },
 })

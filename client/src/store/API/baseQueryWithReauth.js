@@ -1,7 +1,6 @@
 import { fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 import { loginSuccess, logout } from '@/store/Slice/authSlice'
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:1337/api'
+import { API_BASE } from './apiBase'
 
 const refreshBaseQuery = fetchBaseQuery({ baseUrl: API_BASE })
 

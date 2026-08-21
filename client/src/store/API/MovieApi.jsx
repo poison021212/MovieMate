@@ -1,8 +1,8 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
-import createBaseQueryWithReauth from './baseQueryWithReauth'
+import { createBaseQueryWithReauth } from './baseQueryWithReauth'
+import { API_BASE, API_ORIGIN } from './apiBase'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:1337/api'
-const ORIGIN_BASE = API_BASE.replace('/api', '')
+const ORIGIN_BASE = API_ORIGIN
 const TMDB_IMG_BASE = 'https://image.tmdb.org/t/p/w500'
 
 // 统一海报地址规范化

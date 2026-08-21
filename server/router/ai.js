@@ -15,5 +15,6 @@ router.post('/recommend/sessions', authMiddleware, ai_chat.createSession)
 router.delete('/recommend/sessions/:id', authMiddleware, ai_chat.deleteSession)
 router.get('/recommend/sessions/:id/messages', authMiddleware, ai_chat.getSessionMessages)
 router.post('/recommend/chat', authMiddleware, ai_chat.postRecommendChat)
+router.post('/recommend/chat/stream', authMiddleware, ai_chat.postRecommendChatStream)
 
 module.exports = router

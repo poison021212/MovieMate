@@ -1,11 +1,9 @@
 const db = require('../db/index.js')
 const { resolveLocalMovieIdsForCandidates } = require('./movieUpsert.js')
-const { chatResponse_schema } = require('../schema/ai.js')
+const { hasLlm, chatCompletionsText } = require('./llmClient.js')
 
 const TMDB_TOKEN = process.env.TMDB_ACCESS_TOKEN
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
-const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY
-const QWEN_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
 
 async function tmdbFetch(endpoint, options = {}) {
   if (!TMDB_TOKEN) {
@@ -76,147 +74,20 @@ function detectIntent(prompt) {
   return 'mixed'
 }
 
-/** recommend：片单推荐；qa：电影事实问答（仍受控数据源） */
+/** recommend：片单推荐；qa：电影事实问答；chat：话题闲聊（不强制出片） */
 function detectChatMode(message) {
   const t = String(message || '').trim()
   const recommendSignals = /推荐|几部|类似|再来|片单|清单|还有什么|想看|来点/
-  const qaSignals = /导演|主演|演员|简介|剧情|是谁|哪年|什么时候|评分|介绍|讲讲|哪部|什么叫|生平|上映/
+  const qaSignals =
+    /导演|制片人|出品|主编|编剧|主演|演员|简介|剧情|是谁|哪年|什么时候|评分|介绍|讲讲|讲述|讲了什么|讲的是|讲什么|梗概|内容|这部电影|哪部|什么叫|生平|上映|哪一部|谁拍/
+  const chatSignals = /怎么看|聊聊|讨论|主题|叙事|观感|觉得|认为|风格|意义|深度|隐喻|象征|想法|观点/
   const hasRec = recommendSignals.test(t)
   const hasQa = qaSignals.test(t)
-  if (hasQa && !hasRec) return 'qa'
+  const hasChat = chatSignals.test(t)
   if (hasRec) return 'recommend'
   if (hasQa) return 'qa'
+  if (hasChat) return 'chat'
   return 'recommend'
-}
-
-function extractTitleHintForQa(message) {
-  const bookTitle = message.match(/《([^》]+)》/)
-  if (bookTitle) return bookTitle[1].trim()
-  return String(message)
-    .replace(/[？?。，,！!、；;：:]/g, ' ')
-    .replace(/(的)?导演是谁|导演|主演|演员|简介|剧情|介绍|讲讲|是什么/g, ' ')
-    .trim()
-    .slice(0, 40)
-}
-
-async function searchTmdbMoviesForQa(query) {
-  if (!query || !TMDB_TOKEN) return []
-  const data = await tmdbFetch(
-    `/search/movie?query=${encodeURIComponent(query)}&language=zh-CN&region=CN&page=1&include_adult=false`
-  )
-  return Array.isArray(data.results) ? data.results.slice(0, 3) : []
-}
-
-async function fetchTmdbMovieDetail(movieId) {
-  const data = await tmdbFetch(`/movie/${movieId}?language=zh-CN&append_to_response=credits`)
-  const director =
-    data.credits?.crew?.find((c) => c.job === 'Director')?.name ||
-    data.credits?.crew?.[0]?.name ||
-    null
-  return {
-    id: data.id,
-    title: data.title,
-    year: data.release_date ? new Date(data.release_date).getFullYear() : '未知',
-    overview: data.overview,
-    director,
-    vote_average: data.vote_average,
-  }
-}
-
-async function buildQaContext(message) {
-  const hint = extractTitleHintForQa(message)
-  const blocks = []
-
-  if (hint.length >= 1) {
-    const [localRows] = await db.query(
-      `SELECT id, title, director, actors, year, summary, rating
-       FROM movies
-       WHERE title LIKE ? OR director LIKE ? OR actors LIKE ?
-       ORDER BY rating DESC
-       LIMIT 5`,
-      [`%${hint}%`, `%${hint}%`, `%${hint}%`]
-    )
-    localRows.forEach((r) => {
-      blocks.push(
-        `[站内] id=${r.id} 《${r.title}》（${r.year || '未知'}）导演：${r.director || '未知'}；主演：${r.actors || '未知'}；评分：${r.rating ?? '—'}；简介：${(r.summary || '').slice(0, 200)}`
-      )
-    })
-  }
-
-  if (TMDB_TOKEN && hint.length >= 2) {
-    const searchHits = await searchTmdbMoviesForQa(hint)
-    for (const hit of searchHits.slice(0, 2)) {
-      try {
-        const detail = await fetchTmdbMovieDetail(hit.id)
-        blocks.push(
-          `[TMDB] tmdb_id=${detail.id} 《${detail.title}》（${detail.year}）导演：${detail.director || '未知'}；评分：${detail.vote_average ?? '—'}；简介：${(detail.overview || '').slice(0, 280)}`
-        )
-      } catch {
-        blocks.push(
-          `[TMDB] tmdb_id=${hit.id} 《${hit.title}》简介：${(hit.overview || '').slice(0, 200)}`
-        )
-      }
-    }
-  }
-
-  return blocks.join('\n')
-}
-
-async function runChatTurnQa({ message, tasteProfile, historyMessages }) {
-  let qaContext = ''
-  try {
-    qaContext = await buildQaContext(message)
-  } catch (err) {
-    const e = new Error(err.message || '问答资料拉取失败')
-    e.status = 503
-    throw e
-  }
-
-  const systemPrompt =
-    '你是 MovieMate 受控电影问答助手。只能依据下方「资料块」回答电影相关问题，不得编造资料块中不存在的事实。' +
-    '若资料不足，请明确说明无法从当前片库确认。' +
-    tasteProfileToText(tasteProfile) +
-    `\n\n资料块：\n${qaContext || '（无匹配资料）'}` +
-    '\n\n返回单个 JSON 对象（不要 markdown），格式：' +
-    '{"reply":"给用户的中文回复","movies":[]}' +
-    '\nmovies 通常为空；若需指向某部片且资料块中有 tmdb_id 或站内 id，可放 0-2 条 {title,reason,year,tmdb_id}，reason 为简短说明。'
-
-  const convo = [{ role: 'system', content: systemPrompt }]
-  ;(historyMessages || []).slice(-10).forEach((m) => {
-    if (m.role === 'user' || m.role === 'assistant') {
-      convo.push({ role: m.role, content: m.content })
-    }
-  })
-  convo.push({ role: 'user', content: message })
-
-  let parsed = null
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const raw = await callQwenMessages(convo, attempt === 0 ? 0.5 : 0.3)
-    parsed = extractJSONObject(raw)
-    if (parsed) {
-      const { error } = chatResponse_schema.validate(parsed)
-      if (!error) break
-    }
-    parsed = null
-  }
-
-  if (!parsed) {
-    const e = new Error('未生成可信问答结果，请换个说法重试')
-    e.status = 422
-    throw e
-  }
-
-  const movies = (parsed.movies || []).slice(0, 2)
-  return {
-    reply: parsed.reply,
-    movies,
-    meta: {
-      mode: 'qa',
-      contextLineCount: qaContext ? qaContext.split('\n').filter(Boolean).length : 0,
-      profileApplied: Boolean(tasteProfile),
-      toolsUsed: ['tool_localSearch', 'tool_tmdbSearch', 'tool_tmdbDetail'],
-    },
-  }
 }
 
 async function buildTasteProfile(username) {
@@ -308,16 +179,6 @@ function matchesCandidate(movie, candidate) {
   )
 }
 
-function extractJSONObject(str) {
-  const match = str.match(/\{[\s\S]*\}/)
-  if (!match) return null
-  try {
-    return JSON.parse(match[0])
-  } catch {
-    return null
-  }
-}
-
 function extractJSONArray(str) {
   const match = str.match(/\[\s*\{[\s\S]*\}\s*\]/)
   if (!match) return null
@@ -329,27 +190,10 @@ function extractJSONArray(str) {
 }
 
 async function callQwenMessages(messages, temperature = 0.7) {
-  if (!DASHSCOPE_API_KEY) {
-    throw new Error('缺少 DASHSCOPE_API_KEY')
+  if (!hasLlm()) {
+    throw new Error('缺少 LLM 配置：请启动本机 Ollama，或设置 LLM_API_KEY')
   }
-  const response = await fetch(QWEN_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${DASHSCOPE_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'qwen-turbo',
-      messages,
-      temperature,
-      stream: false,
-    }),
-  })
-  if (!response.ok) {
-    throw new Error(`通义千问请求失败: ${response.status}`)
-  }
-  const data = await response.json()
-  return data.choices[0]?.message?.content || ''
+  return chatCompletionsText({ messages, temperature })
 }
 
 function enrichMoviesFromCandidates(recommendedMovies, movieCandidates, localIdByTmdb) {
@@ -437,86 +281,6 @@ async function runSingleTurnRecommend(prompt, tasteProfile) {
   }
 }
 
-/** 多轮 chat：返回自然语言 + 结构化 movies */
-async function runChatTurn({ message, tasteProfile, historyMessages }) {
-  const mode = detectChatMode(message)
-  if (mode === 'qa') {
-    return runChatTurnQa({ message, tasteProfile, historyMessages })
-  }
-
-  const intent = detectIntent(message)
-  let movieCandidates = []
-  try {
-    movieCandidates = await fetchCandidatesForIntent(intent)
-  } catch (err) {
-    const e = new Error(err.message || '候选片库拉取失败')
-    e.status = 503
-    throw e
-  }
-  if (movieCandidates.length === 0) {
-    const e = new Error('当前候选片库为空，请检查 TMDB 配置')
-    e.status = 503
-    throw e
-  }
-
-  const localIdByTmdb = await resolveLocalMovieIdsForCandidates(movieCandidates)
-  const movieListText = movieCandidates
-    .map((m) => `- 《${m.title}》（${m.year}年，TMDB ID: ${m.id}）`)
-    .join('\n')
-
-  const systemPrompt =
-    '你是 MovieMate 受控推荐助手。你只能使用提供的候选电影列表作答。' +
-    `\n候选列表：\n${movieListText}` +
-    tasteProfileToText(tasteProfile) +
-    '\n\n返回单个 JSON 对象（不要 markdown），格式：' +
-    '{"reply":"给用户的中文回复","movies":[{"title":"","reason":"","year":2020,"tmdb_id":123}]}' +
-    '\nmovies 必须从候选列表选 0-5 部，禁止列表外片名。'
-
-  const convo = [{ role: 'system', content: systemPrompt }]
-  ;(historyMessages || []).slice(-10).forEach((m) => {
-    if (m.role === 'user' || m.role === 'assistant') {
-      convo.push({ role: m.role, content: m.content })
-    }
-  })
-  convo.push({ role: 'user', content: message })
-
-  let parsed = null
-  let raw = ''
-  for (let attempt = 0; attempt < 2; attempt++) {
-    raw = await callQwenMessages(convo, attempt === 0 ? 0.7 : 0.3)
-    parsed = extractJSONObject(raw)
-    if (parsed) {
-      const { error } = chatResponse_schema.validate(parsed)
-      if (!error) break
-    }
-    parsed = null
-  }
-
-  if (!parsed) {
-    const e = new Error('未生成可信对话结果，请换个说法重试')
-    e.status = 422
-    throw e
-  }
-
-  let movies = (parsed.movies || []).filter((movie) =>
-    movieCandidates.some((c) => matchesCandidate(movie, c))
-  )
-  const enrichedMovies = enrichMoviesFromCandidates(movies, movieCandidates, localIdByTmdb)
-
-  return {
-    reply: parsed.reply,
-    movies: enrichedMovies,
-    meta: {
-      ...buildMeta(movieCandidates, enrichedMovies, tasteProfile, [
-        'tool_readTasteProfile',
-        'tool_fetchTmdbCandidates',
-        'tool_groundAndMapLocal',
-      ]),
-      mode: 'recommend',
-    },
-  }
-}
-
 /** 本地片库画像推荐（左栏默认列表） */
 async function getProfileFeedMovies(username, limit = 12) {
   const tasteProfile = await buildTasteProfile(username)
@@ -569,6 +333,6 @@ async function getProfileFeedMovies(username, limit = 12) {
 module.exports = {
   buildTasteProfile,
   runSingleTurnRecommend,
-  runChatTurn,
   getProfileFeedMovies,
+  detectChatMode,
 }

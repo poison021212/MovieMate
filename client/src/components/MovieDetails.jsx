@@ -4,8 +4,7 @@ import { confirmDanger } from '@/utils/confirmDialog';
 import { HeartOutlined, HeartFilled, DownOutlined, UpOutlined } from '@ant-design/icons';
 import { useState, useEffect } from 'react';
 import { useGetMoviesByIdQuery } from '@/store/API/MovieApi';
-import { useSelector, useDispatch } from 'react-redux';
-import { addFavorite, removeFavorite } from '../store/Slice/favoriteSlice';
+import { useSelector } from 'react-redux';
 import ReviewsForm from './ReviewsForm';
 import { useGetFavoriteQuery, useAddFavoriteMutation, useDelFavoriteMutation } from '@/store/API/favoriteApi';
 

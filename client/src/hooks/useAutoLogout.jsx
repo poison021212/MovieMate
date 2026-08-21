@@ -12,16 +12,14 @@ const useAutoLogout = () => {
     if (!auth.isLogin || !auth.tokenExpireTime) return
 
     const timeout = auth.tokenExpireTime - Date.now()
-    const refreshToken = auth.refreshToken || localStorage.getItem('refreshToken')
 
-    if (timeout < 60_000 && refreshToken) {
-      refreshTokenFn({ refreshToken })
+    if (timeout < 60_000) {
+      refreshTokenFn({})
         .unwrap()
         .then((data) => {
           dispatch(
             loginSuccess({
               token: data.accessToken || data.jwt,
-              refreshToken: data.refreshToken,
               userInfo: data.user,
               expiresIn: data.expiresIn,
             })

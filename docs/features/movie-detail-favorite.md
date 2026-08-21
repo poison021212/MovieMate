@@ -2,7 +2,7 @@
 
 - 状态：已实现
 - 负责人：MovieMate 维护者
-- 最后核对日期：2026-08-03
+- 最后核对日期：2026-08-21
 
 ## 1. 目标
 
@@ -41,8 +41,8 @@
 注册/登录（详见 [auth-security.md](auth-security.md)）：
 
 - `POST /api/auth/local/register` — 强密码 + 邮箱；注册后需验证邮箱
-- `POST /api/auth/local` — `{ identifier, password }`（用户名或邮箱）；返回 access + refresh token
-- `POST /api/auth/verify-email`、`/auth/forgot-password`、`/auth/reset-password`、`/auth/refresh`
+- `POST /api/auth/local` — `{ identifier, password }`（用户名或邮箱）；Set-Cookie 写入 refresh；JSON 仅含 `accessToken` + `user`
+- `GET /api/auth/me`、`POST /api/auth/refresh`（Cookie 续期）、`/auth/logout` 等详见 [auth-security.md](auth-security.md)
 
 ## 6. 数据边界
 

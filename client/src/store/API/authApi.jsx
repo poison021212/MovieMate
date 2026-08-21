@@ -43,13 +43,17 @@ const authApi = createApi({
         },
       }),
       refreshToken: builder.mutation({
-        query(body) {
+        query() {
           return {
             url: 'auth/refresh',
             method: 'POST',
-            body,
+            body: {},
           }
         },
+        extraOptions: { skipReauth: true },
+      }),
+      getMe: builder.query({
+        query: () => 'auth/me',
       }),
       logout: builder.mutation({
         query(body) {
@@ -89,6 +93,7 @@ export const {
   useVerifyEmailMutation,
   useResendVerificationMutation,
   useRefreshTokenMutation,
+  useGetMeQuery,
   useLogoutMutation,
   useForgotPasswordMutation,
   useResetPasswordMutation,

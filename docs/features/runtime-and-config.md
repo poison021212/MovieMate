@@ -2,7 +2,7 @@
 
 - 状态：已实现
 - 负责人：MovieMate 维护者
-- 最后核对日期：2026-08-06
+- 最后核对日期：2026-08-21
 
 ## 1. 目标
 
@@ -42,7 +42,7 @@ git checkout clean-structure
 
 - Node.js 20 LTS（推荐）
 - MySQL 8.x 或 5.7+
-- 可选：TMDB、DashScope 密钥（AI 与同步）
+- 可选：TMDB 密钥；AI 默认本机 Ollama（见 §6），或云端 `LLM_API_KEY`
 
 ## 5. 启动步骤
 
@@ -51,8 +51,9 @@ git checkout clean-structure
 3. （可选）演示账号与口味数据：`mysql -u root -p movie_db < server/sql/demo_seed.sql`（用户 `demo_user` / 密码 `123456`）
 4. 若库已存在且缺少新表：`mysql -u root -p movie_db < server/sql/ai_chat_and_replies.sql`
 5. 认证升级（邮箱验证 / refresh / 找回密码）：`mysql -u root -p movie_db < server/sql/auth_upgrade.sql`
-6. `copy server\.env.example server\.env` 并填写 `DB_*`、`JWT_SECRET`、`APP_PUBLIC_URL`
-7. 根目录 `npm run dev`（或分别 `npm run dev:server` / `npm run dev:client`）
+6. 分析与趋势字段（仪表盘）：`mysql -u root -p movie_db < server/sql/analytics_upgrade.sql`（列已存在时可忽略报错）
+7. `copy server\.env.example server\.env` 并填写 `DB_*`、`JWT_SECRET`、`APP_PUBLIC_URL`
+8. 根目录 `npm run dev`（或分别 `npm run dev:server` / `npm run dev:client`）
 
 端口默认：API `1337`，前端 `5173`（Vite 代理 `/api` -> 1337）。
 
@@ -66,7 +67,27 @@ git checkout clean-structure
 | `JWT_SECRET` / `JWT_EXPIRE` | 是 | 登录令牌 |
 | `PORT` | 否 | 默认 1337 |
 | `TMDB_ACCESS_TOKEN` | 否 | TMDB + 同步脚本 |
-| `DASHSCOPE_API_KEY` | 否 | AI 推荐 |
+| `LLM_BASE_URL` | 否 | 默认 `http://127.0.0.1:11434/v1/chat/completions`（本机 Ollama） |
+| `LLM_MODEL` | 否 | 默认 `qwen2.5:7b`；**必须与 `ollama list` 输出的 NAME 完全一致**（如 `qwen3.5:cloud`） |
+| `LLM_API_KEY` | 否 | 云端 OpenAI 兼容 API Key；本机 Ollama 可留空 |
+| `DEEPSEEK_API_KEY` | 否 | 等同 `LLM_API_KEY` 的回退 |
+| `DASHSCOPE_API_KEY` | 否 | 千问 Key（配合千问 `LLM_BASE_URL` / `LLM_MODEL`） |
+
+**本机 Ollama（默认，免费）**
+
+1. 安装 [Ollama](https://ollama.com/download)
+2. 执行 `ollama list`，确认已有可用模型；若无默认 `qwen2.5:7b` 可 `ollama pull qwen2.5:7b`，或在 `.env` 里把 `LLM_MODEL` 改成列表中的 NAME（如 `qwen3.5:cloud`）
+3. 保持 Ollama 运行；`server/.env` 配置 `LLM_BASE_URL`、`LLM_MODEL`、`LLM_API_KEY`（本机 Ollama 可留空 Key）
+4. 使用 `:cloud` 后缀模型（如 `qwen3.5:cloud`）前需 **`ollama signin`** 登录 Ollama 账号；PowerShell 探测服务可用性请用 `curl.exe http://127.0.0.1:11434/api/tags`（不要用 `curl` 别名）
+
+**换云端模型（只改 `.env`，不改代码）**
+
+| 提供商 | `LLM_BASE_URL` | `LLM_MODEL` | Key |
+| --- | --- | --- | --- |
+| DeepSeek | `https://api.deepseek.com/chat/completions` | `deepseek-chat` | `LLM_API_KEY` 或 `DEEPSEEK_API_KEY` |
+| 千问 DashScope | `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions` | `qwen-turbo` | `DASHSCOPE_API_KEY` |
+
+实现：[`server/utils/llmClient.js`](../../server/utils/llmClient.js)
 
 前端可选：`VITE_API_URL`（默认 `http://localhost:1337/api`）。
 
@@ -81,6 +102,7 @@ git checkout clean-structure
 | 数据库连接失败 | 检查 MySQL 服务与 `.env` |
 | 前端模块缺失 | 根目录重新 `npm install` |
 | TMDB/Postman 超时 | 检查网络/DNS/代理，非仅 token 问题 |
+| AI 推荐无回复 / 降级 | `ollama list` 是否含 `LLM_MODEL` 同名模型；`:cloud` 模型是否已 `ollama signin`；改 `.env` 后是否重启后端；查看助手正文或 toast 中的 LLM 错误详情 |
 | 速览/收藏异常 | 确认已登录且 JWT 未过期 |
 
 ## 9. 生产构建

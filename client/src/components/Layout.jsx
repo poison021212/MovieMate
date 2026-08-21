@@ -1,6 +1,6 @@
 import React from 'react'
 import { Layout as AntLayout, Menu, Dropdown, Space, Modal } from 'antd';
-import { HomeOutlined, HeartOutlined, UserOutlined, LogoutOutlined, MessageOutlined, DownOutlined, OpenAIOutlined, SwapOutlined } from '@ant-design/icons';
+import { HomeOutlined, HeartOutlined, UserOutlined, LogoutOutlined, MessageOutlined, DownOutlined, OpenAIOutlined, SwapOutlined, BarChartOutlined, SettingOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux';
 import { useLocation } from 'react-router-dom';
@@ -22,6 +22,8 @@ const Layout = (props) => {
     if (path === '/auth') return 'auth'
     if (path === '/movie/:id') return 'movie/:id'
     if (path === '/ai-recommend') return 'ai-recommend'
+    if (path === '/dashboard') return 'dashboard'
+    if (path === '/admin') return 'admin'
   }
   const items = [{
     key: 'profile',
@@ -35,6 +37,14 @@ const Layout = (props) => {
     key: 'profile-review',
     icon: <MessageOutlined />,
     label: <Link to="/profile-review">我的评论</Link>
+  },
+  {
+    type: 'divider',
+  },
+  {
+    key: 'admin',
+    icon: <SettingOutlined />,
+    label: <Link to="/admin">运营台</Link>,
   }]
   const logoutConfirm = () => {
     Modal.confirm({
@@ -45,9 +55,7 @@ const Layout = (props) => {
       onOk: async () => {
         try {
           if (auth.isLogin) {
-            await logoutApi({
-              refreshToken: auth.refreshToken || localStorage.getItem('refreshToken'),
-            }).unwrap()
+            await logoutApi({}).unwrap()
           }
         } catch {
           /* still clear local session */
@@ -73,6 +81,14 @@ const Layout = (props) => {
           <Menu.Item key="ai-recommend" icon={<OpenAIOutlined />}>
             <Link to="/ai-recommend">AI推荐</Link>
           </Menu.Item>
+          <Menu.Item key="dashboard" icon={<BarChartOutlined />}>
+            <Link to="/dashboard">数据洞察</Link>
+          </Menu.Item>
+          {auth.isLogin && (
+            <Menu.Item key="admin" icon={<SettingOutlined />}>
+              <Link to="/admin">运营台</Link>
+            </Menu.Item>
+          )}
           {!auth.isLogin && (
             <Menu.Item key="auth" icon={<UserOutlined />} style={{ marginLeft: 'auto' }}>
               <Link to="/auth" state={{ from: location }}>登录/注册</Link>

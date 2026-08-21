@@ -10,7 +10,9 @@
 | [movie-detail-favorite.md](features/movie-detail-favorite.md) | 电影详情与收藏 |
 | [review-flow.md](features/review-flow.md) | 影评发布、列表、删除 |
 | [swipe-mode.md](features/swipe-mode.md) | 速览模式（上下滑 + 分页预加载） |
-| [ai-recommendation.md](features/ai-recommendation.md) | AI 电影推荐 |
+| [ai-recommendation.md](features/ai-recommendation.md) | AI 电影推荐（Tool-calling Agent） |
+| [analytics-dashboard.md](features/analytics-dashboard.md) | 数据洞察仪表盘（日快照 + AI 预测） |
+| [ops-console.md](features/ops-console.md) | 运营控制台 |
 | [tmdb-sync.md](features/tmdb-sync.md) | TMDB 数据同步脚本 |
 | [runtime-and-config.md](features/runtime-and-config.md) | 环境、启动、数据库与故障排查 |
 | [auth-security.md](features/auth-security.md) | 登录注册、邮箱验证、会话与密码找回 |

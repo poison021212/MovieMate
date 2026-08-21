@@ -12,19 +12,22 @@ import {
   List,
   Typography,
   Empty,
+  Collapse,
+  Timeline,
   Modal,
   Image,
 } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import {
   useGetProfileFeedQuery,
   useListAiSessionsQuery,
   useCreateAiSessionMutation,
   useDeleteAiSessionMutation,
   useGetAiSessionMessagesQuery,
-  useRecommendChatMutation,
 } from '@/store/API/vercelApi';
+import vercelApi from '@/store/API/vercelApi';
+import { streamRecommendChat } from '@/utils/streamRecommendChat';
 
 const { TextArea } = Input;
 const { Text, Title } = Typography;
@@ -80,11 +83,17 @@ function MovieCard({ movie, onDetail }) {
 const AIRecommend = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const dispatch = useDispatch();
   const auth = useSelector((state) => state.auth);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [chatInput, setChatInput] = useState('');
   const [chatMovies, setChatMovies] = useState([]);
   const [lastChatMode, setLastChatMode] = useState(null);
+  const [lastAgentTrace, setLastAgentTrace] = useState([]);
+  const [lastSources, setLastSources] = useState([]);
+  const [lastPlan, setLastPlan] = useState([]);
+  const [streamingText, setStreamingText] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
   const [pendingUserMessage, setPendingUserMessage] = useState(null);
   const chatEndRef = useRef(null);
   const shouldAutoScrollRef = useRef(false);
@@ -102,7 +111,6 @@ const AIRecommend = () => {
 
   const [createSession] = useCreateAiSessionMutation();
   const [deleteSession] = useDeleteAiSessionMutation();
-  const [recommendChat, { isLoading: chatLoading }] = useRecommendChatMutation();
 
   const profileMovies = profileData?.movies || [];
   const tasteProfile = profileData?.tasteProfile;
@@ -114,10 +122,15 @@ const AIRecommend = () => {
       setActiveSessionId(null);
       return;
     }
-    if (!activeSessionId && sessions.length > 0) {
+    if (sessions.length === 0) {
+      if (activeSessionId != null && !sessionsLoading) setActiveSessionId(null);
+      return;
+    }
+    const selectedExists = sessions.some((s) => s.id === activeSessionId);
+    if (!activeSessionId || !selectedExists) {
       setActiveSessionId(sessions[0].id);
     }
-  }, [auth.isLogin, sessions, activeSessionId]);
+  }, [auth.isLogin, sessions, activeSessionId, sessionsLoading]);
 
   useEffect(() => {
     if (!shouldAutoScrollRef.current) return;
@@ -195,22 +208,74 @@ const AIRecommend = () => {
     const draft = text;
     setChatInput('');
     setPendingUserMessage(draft);
+    setStreamingText('');
+    setLastPlan([]);
+    setLastAgentTrace([]);
+    setLastSources([]);
+    setLastChatMode(null);
+    setChatLoading(true);
     shouldAutoScrollRef.current = true;
     messagesLenAtSendRef.current = messages.length;
+    const traceAcc = [];
     try {
-      const result = await recommendChat({
-        sessionId: activeSessionId || undefined,
+      const sessionInList =
+        activeSessionId != null && sessions.some((s) => s.id === activeSessionId);
+      const sessionIdToSend =
+        sessionInList || (sessionsLoading && activeSessionId != null)
+          ? activeSessionId
+          : undefined;
+
+      let donePayload = null;
+      await streamRecommendChat({
+        sessionId: sessionIdToSend,
         message: draft,
-      }).unwrap();
+        token: auth.token,
+        onEvent: (event, data) => {
+          if (event === 'session' && data.sessionId) {
+            setActiveSessionId(data.sessionId);
+          }
+          if (event === 'plan') {
+            setLastPlan(data.steps || []);
+            traceAcc.push({ tool: 'plan_tasks', ok: true, steps: data.steps });
+            setLastAgentTrace([...traceAcc]);
+          }
+          if (event === 'trace' && data.entry) {
+            traceAcc.push(data.entry);
+            setLastAgentTrace([...traceAcc]);
+          }
+          if (event === 'token' && data.text) {
+            setStreamingText((prev) => prev + data.text);
+          }
+          if (event === 'error' && data.message) {
+            message.warning(String(data.message).slice(0, 240));
+          }
+          if (event === 'done') {
+            donePayload = data;
+          }
+        },
+      });
+
       setPendingUserMessage(null);
-      setActiveSessionId(result.sessionId);
-      setChatMovies(result.movies || []);
-      setLastChatMode(result.meta?.mode || null);
+      setStreamingText('');
+      if (donePayload) {
+        setActiveSessionId(donePayload.sessionId);
+        setChatMovies(donePayload.movies || []);
+        setLastChatMode(donePayload.meta?.mode || null);
+        setLastAgentTrace(donePayload.meta?.agentTrace || traceAcc);
+        setLastSources(donePayload.meta?.sources || []);
+        if (donePayload.meta?.plan) setLastPlan(donePayload.meta.plan);
+      }
+      dispatch(
+        vercelApi.util.invalidateTags(['AiSessions', 'ProfileFeed', { type: 'AiMessages', id: donePayload?.sessionId }])
+      );
     } catch (err) {
       setPendingUserMessage(null);
+      setStreamingText('');
       setChatInput(draft);
       shouldAutoScrollRef.current = false;
-      message.error(err?.data?.error?.message || '发送失败');
+      message.error(err?.message || '发送失败');
+    } finally {
+      setChatLoading(false);
     }
   };
 
@@ -220,7 +285,7 @@ const AIRecommend = () => {
     <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
       <Title level={2}>AI 电影推荐</Title>
       <Text type="secondary">
-        左侧根据收藏与观后笔记生成画像推荐；右侧为多轮会话（需登录），结果优先跳转站内详情。
+        左侧为画像推荐；右侧支持片单推荐、演职员事实问答（导演/制片人等）与电影话题闲聊（需登录）。
       </Text>
 
       <Row gutter={24} style={{ marginTop: 24 }}>
@@ -290,8 +355,91 @@ const AIRecommend = () => {
                 />
                 {lastChatMode && (
                   <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
-                    上一轮模式：{lastChatMode === 'qa' ? '电影问答' : '推荐'}
+                    上一轮模式：
+                    {lastChatMode === 'recommend'
+                      ? '片单推荐'
+                      : lastChatMode === 'qa'
+                        ? '事实问答'
+                        : lastChatMode === 'chat'
+                          ? '话题闲聊'
+                          : lastChatMode === 'agent'
+                            ? 'Agent'
+                            : lastChatMode}
                   </Text>
+                )}
+                {lastPlan.length > 0 && (
+                  <Collapse
+                    size="small"
+                    style={{ marginBottom: 12 }}
+                    items={[
+                      {
+                        key: 'plan',
+                        label: `执行计划（${lastPlan.length} 步）`,
+                        children: (
+                          <ol style={{ margin: 0, paddingLeft: 20 }}>
+                            {lastPlan.map((step) => (
+                              <li key={step.id || step.tool}>
+                                <Text code>{step.tool}</Text> — {step.reason}
+                              </li>
+                            ))}
+                          </ol>
+                        ),
+                      },
+                    ]}
+                  />
+                )}
+                {lastAgentTrace.length > 0 && (
+                  <Collapse
+                    size="small"
+                    style={{ marginBottom: 12 }}
+                    items={[
+                      {
+                        key: 'trace',
+                        label: `工具轨迹（${lastAgentTrace.length} 步）`,
+                        children: (
+                          <Timeline
+                            items={lastAgentTrace.map((step, idx) => ({
+                              color: step.ok ? 'green' : 'red',
+                              children: (
+                                <div key={idx}>
+                                  <Text code>{step.tool}</Text>
+                                  {step.latencyMs != null && (
+                                    <Text type="secondary"> · {step.latencyMs}ms</Text>
+                                  )}
+                                  {!step.ok && <Text type="danger"> 失败</Text>}
+                                  {step.degraded && <Text type="warning"> 降级</Text>}
+                                </div>
+                              ),
+                            }))}
+                          />
+                        ),
+                      },
+                    ]}
+                  />
+                )}
+                {lastSources.length > 0 && (
+                  <Collapse
+                    size="small"
+                    style={{ marginBottom: 12 }}
+                    items={[
+                      {
+                        key: 'sources',
+                        label: `来源引用（${lastSources.length}）`,
+                        children: (
+                          <ul style={{ margin: 0, paddingLeft: 20 }}>
+                            {lastSources.map((src, idx) => (
+                              <li key={idx}>
+                                <Text code>{src.type}</Text>
+                                {src.tmdb_id != null && ` tmdb:${src.tmdb_id}`}
+                                {src.local_id != null && ` local:${src.local_id}`}
+                                {src.count != null && ` ×${src.count}`}
+                              </li>
+                            ))}
+                          </ul>
+                        ),
+                      },
+                    ]}
+                  />
                 )}
                 <div
                   ref={chatScrollContainerRef}
@@ -324,6 +472,32 @@ const AIRecommend = () => {
                           附带 {msg.movies.length} 部推荐
                         </Text>
                       )}
+                      {msg.meta?.agentTrace?.length > 0 && (
+                        <Collapse
+                          size="small"
+                          style={{ marginTop: 8, maxWidth: 420 }}
+                          items={[
+                            {
+                              key: 'hist-trace',
+                              label: `工具轨迹 ${msg.meta.agentTrace.length} 步`,
+                              children: (
+                                <Timeline
+                                  size="small"
+                                  items={msg.meta.agentTrace.map((step, idx) => ({
+                                    color: step.ok ? 'green' : 'red',
+                                    children: (
+                                      <span key={idx}>
+                                        {step.tool}
+                                        {step.latencyMs != null ? ` (${step.latencyMs}ms)` : ''}
+                                      </span>
+                                    ),
+                                  }))}
+                                />
+                              ),
+                            },
+                          ]}
+                        />
+                      )}
                     </div>
                   ))}
                   {pendingUserMessage && (
@@ -335,14 +509,23 @@ const AIRecommend = () => {
                       </Text>
                     </div>
                   )}
-                  {chatLoading && !pendingUserMessage && <Spin size="small" />}
+                  {streamingText && (
+                    <div style={{ marginBottom: 12, textAlign: 'left' }}>
+                      <Tag color="green">AI</Tag>
+                      <div style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>{streamingText}</div>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        生成中…
+                      </Text>
+                    </div>
+                  )}
+                  {chatLoading && !pendingUserMessage && !streamingText && <Spin size="small" />}
                   <div ref={chatEndRef} />
                 </div>
                 <TextArea
                   rows={3}
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="例如：再推荐几部近年的悬疑片，不要恐怖"
+                  placeholder="例如：《盗梦空间》的导演和制片人是谁？/ 聊聊诺兰的非线性叙事 / 推荐几部近年悬疑"
                   onPressEnter={(e) => {
                     if (!e.shiftKey) {
                       e.preventDefault();

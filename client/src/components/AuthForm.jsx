@@ -43,7 +43,6 @@ const AuthForm = () => {
         dispatch(
           loginSuccess({
             token: result.data.accessToken || result.data.jwt,
-            refreshToken: result.data.refreshToken,
             userInfo: result.data.user,
             expiresIn: result.data.expiresIn,
           })

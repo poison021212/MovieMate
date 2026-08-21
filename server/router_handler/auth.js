@@ -8,7 +8,6 @@ const {
   resend_verification_schema,
   forgot_password_schema,
   reset_password_schema,
-  refresh_schema,
   logout_schema,
 } = require('../schema/user.js')
 const { generateToken, hashToken } = require('../utils/cryptoToken.js')
@@ -16,6 +15,11 @@ const { sendVerificationEmail, sendPasswordResetEmail } = require('../utils/emai
 const { checkLoginAllowed, recordFailure, clearFailures } = require('../utils/loginRateLimit.js')
 const { authLog } = require('../utils/authAuditLog.js')
 const refreshStore = require('../utils/refreshTokenStore.js')
+const {
+  getRefreshTokenFromRequest,
+  sendAuthJson,
+  clearRefreshCookie,
+} = require('../utils/authCookies.js')
 
 const ACCESS_EXPIRE = process.env.JWT_ACCESS_EXPIRE || process.env.JWT_EXPIRE || '30m'
 const REFRESH_EXPIRE = process.env.JWT_REFRESH_EXPIRE || '7d'
@@ -243,7 +247,7 @@ exports.login = async (req, res) => {
     clearFailures(ip, identifier)
     const tokens = await issueTokenPair(req, user)
     authLog('login_success', { userId: user.id, username: user.username })
-    res.json(tokens)
+    sendAuthJson(res, tokens)
   } catch (err) {
     if (isMissingAuthTable(err)) {
       return res.cc('缺少认证相关表，请执行 server/sql/auth_upgrade.sql', 503)
@@ -254,18 +258,21 @@ exports.login = async (req, res) => {
 }
 
 exports.refresh = async (req, res) => {
-  const { error } = refresh_schema.validate(req.body)
-  if (error) return res.cc(error.details[0].message, 400)
+  const refreshToken = getRefreshTokenFromRequest(req)
+  if (!refreshToken) return res.cc('刷新令牌无效或已过期', 401)
 
-  const { refreshToken } = req.body
   try {
     const session = await refreshStore.findValidRefreshSession(refreshToken)
-    if (!session) return res.cc('刷新令牌无效或已过期', 401)
+    if (!session) {
+      clearRefreshCookie(res)
+      return res.cc('刷新令牌无效或已过期', 401)
+    }
 
     const [users] = await db.query(`SELECT * FROM users WHERE id = ? LIMIT 1`, [session.user_id])
     const user = users[0]
     if (!user || user.status !== 'active' || !user.email_verified) {
       await refreshStore.revokeRefreshSession(refreshToken)
+      clearRefreshCookie(res)
       return res.cc('账号状态异常', 403)
     }
 
@@ -275,10 +282,13 @@ exports.refresh = async (req, res) => {
       newRefresh,
       refreshExpiresAt()
     )
-    if (!rotated) return res.cc('刷新令牌无效或已过期', 401)
+    if (!rotated) {
+      clearRefreshCookie(res)
+      return res.cc('刷新令牌无效或已过期', 401)
+    }
 
     const accessToken = signAccessToken(user)
-    res.json({
+    sendAuthJson(res, {
       jwt: accessToken,
       accessToken,
       refreshToken: newRefresh,
@@ -293,12 +303,24 @@ exports.refresh = async (req, res) => {
   }
 }
 
+exports.getMe = async (req, res) => {
+  try {
+    const [users] = await db.query(`SELECT * FROM users WHERE id = ? LIMIT 1`, [req.user.id])
+    const user = users[0]
+    if (!user) return res.cc('用户不存在', 404)
+    res.json({ user: publicUser(user) })
+  } catch (err) {
+    return res.cc('获取用户信息失败', 500)
+  }
+}
+
 exports.logout = async (req, res) => {
   const { error } = logout_schema.validate(req.body || {})
   if (error) return res.cc(error.details[0].message, 400)
 
   try {
-    const { refreshToken, allDevices } = req.body || {}
+    const { allDevices } = req.body || {}
+    const refreshToken = getRefreshTokenFromRequest(req)
     if (allDevices && req.user?.id) {
       await refreshStore.revokeAllUserSessions(req.user.id)
       authLog('logout_all', { userId: req.user.id })
@@ -306,6 +328,7 @@ exports.logout = async (req, res) => {
       await refreshStore.revokeRefreshSession(refreshToken)
       authLog('logout', { userId: req.user?.id || null })
     }
+    clearRefreshCookie(res)
     res.status(204).send()
   } catch (err) {
     return res.cc('退出失败', 500)

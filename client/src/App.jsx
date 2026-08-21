@@ -11,12 +11,16 @@ import VerifyEmailPage from '@/pages/VerifyEmailPage'
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import useAutoLogout from '@/hooks/useAutoLogout'
+import useSessionBootstrap from '@/hooks/useSessionBootstrap'
 import ProfileReviewPage from '@/pages/ProfileReviewPage'
 import NeedAuth from '@/components/NeedAuth'
 import AIRecommend from '@/components/AIRecommend'
 import MovieSwipePage from '@/pages/MovieSwipePage'
+import DashboardPage from '@/pages/DashboardPage'
+import AdminPage from '@/pages/AdminPage'
 
 function App() {
+  useSessionBootstrap()
   useAutoLogout()
   return (
     <AntdApp>
@@ -33,6 +37,8 @@ function App() {
           <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
           <Route path="/profile-review" element={<NeedAuth><ProfileReviewPage /></NeedAuth>} />
           <Route path="/ai-recommend" element={<AIRecommend />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/admin" element={<AdminPage />} />
         </Routes>
       </Layout>
     </AntdApp>

@@ -9,11 +9,14 @@
     "dev": "nodemon server.js",
     "sync:tmdb": "node scripts/syncTmdbMovies.js",
     "sync:tmdb:daily": "node scripts/syncTmdbMovies.js --jobs popular,now_playing,upcoming --pages 3",
-    "sync:tmdb:weekly": "node scripts/syncTmdbMovies.js --jobs top_rated --pages 10"
+    "sync:tmdb:weekly": "node scripts/syncTmdbMovies.js --jobs top_rated --pages 10",
+    "snapshot:analytics": "node scripts/snapshotAnalytics.js",
+    "snapshot:analytics:seed": "node scripts/snapshotAnalytics.js --days 7"
   },
   "type": "commonjs",
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^16.4.7",
     "express": "^5.2.1",

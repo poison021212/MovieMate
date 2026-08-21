@@ -48,6 +48,14 @@ async function touchSession(sessionId, titlePatch) {
   }
 }
 
+async function updateSessionSummary(sessionId, summary) {
+  if (!summary) return
+  await db.query(`UPDATE ai_recommend_sessions SET summary = ? WHERE id = ?`, [
+    summary.slice(0, 500),
+    sessionId,
+  ])
+}
+
 async function listMessages(sessionId, limit = 100) {
   const [rows] = await db.query(
     `SELECT id, role, content, movies_json, meta_json, created_at
@@ -98,6 +106,7 @@ module.exports = {
   deleteSession,
   getSessionForUser,
   touchSession,
+  updateSessionSummary,
   listMessages,
   appendMessage,
 }

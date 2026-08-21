@@ -70,7 +70,7 @@ exports.reset_password_schema = joi.object({
 })
 
 exports.refresh_schema = joi.object({
-  refreshToken: joi.string().trim().min(16).max(256).required(),
+  refreshToken: joi.string().trim().min(16).max(256).optional(),
 })
 
 exports.logout_schema = joi.object({

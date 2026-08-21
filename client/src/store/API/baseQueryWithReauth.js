@@ -2,13 +2,17 @@ import { fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 import { loginSuccess, logout } from '@/store/Slice/authSlice'
 import { API_BASE } from './apiBase'
 
-const refreshBaseQuery = fetchBaseQuery({ baseUrl: API_BASE })
+const refreshBaseQuery = fetchBaseQuery({
+  baseUrl: API_BASE,
+  credentials: 'include',
+})
 
 export function createBaseQueryWithReauth(baseUrl) {
   const rawBaseQuery = fetchBaseQuery({
     baseUrl,
+    credentials: 'include',
     prepareHeaders: (headers, { getState }) => {
-      const token = getState().auth?.token || localStorage.getItem('token')
+      const token = getState().auth?.token
       if (token) headers.set('Authorization', `Bearer ${token}`)
       return headers
     },
@@ -18,31 +22,24 @@ export function createBaseQueryWithReauth(baseUrl) {
     let result = await rawBaseQuery(args, api, extraOptions)
 
     if (result.error?.status === 401 && !extraOptions?.skipReauth) {
-      const refreshToken =
-        api.getState().auth?.refreshToken || localStorage.getItem('refreshToken')
-      if (refreshToken) {
-        const refreshResult = await refreshBaseQuery(
-          {
-            url: 'auth/refresh',
-            method: 'POST',
-            body: { refreshToken },
-          },
-          api,
-          extraOptions
+      const refreshResult = await refreshBaseQuery(
+        {
+          url: 'auth/refresh',
+          method: 'POST',
+          body: {},
+        },
+        api,
+        { ...extraOptions, skipReauth: true }
+      )
+      if (refreshResult.data) {
+        api.dispatch(
+          loginSuccess({
+            token: refreshResult.data.accessToken || refreshResult.data.jwt,
+            userInfo: refreshResult.data.user,
+            expiresIn: refreshResult.data.expiresIn,
+          })
         )
-        if (refreshResult.data) {
-          api.dispatch(
-            loginSuccess({
-              token: refreshResult.data.accessToken || refreshResult.data.jwt,
-              refreshToken: refreshResult.data.refreshToken,
-              userInfo: refreshResult.data.user,
-              expiresIn: refreshResult.data.expiresIn,
-            })
-          )
-          result = await rawBaseQuery(args, api, extraOptions)
-        } else {
-          api.dispatch(logout())
-        }
+        result = await rawBaseQuery(args, api, extraOptions)
       } else {
         api.dispatch(logout())
       }

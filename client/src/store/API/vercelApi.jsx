@@ -46,7 +46,10 @@ const vercelApi = createApi({
       query: ({ sessionId, message }) => ({
         url: 'recommend/chat',
         method: 'POST',
-        body: { sessionId, message },
+        body:
+          sessionId != null && sessionId !== ''
+            ? { sessionId, message }
+            : { message },
       }),
       invalidatesTags: (_r, _e, arg) => [
         'AiSessions',

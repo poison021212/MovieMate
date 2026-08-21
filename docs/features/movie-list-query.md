@@ -2,7 +2,7 @@
 
 - 状态：已实现
 - 负责人：MovieMate 维护者
-- 最后核对日期：2026-08-04
+- 最后核对日期：2026-08-21
 
 ## 1. 目标
 
@@ -35,7 +35,7 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 | 场景 | Method + Path | 关键请求 | 关键响应 | 限制 |
 | --- | --- | --- | --- | --- |
 | 分页列表 | `GET /api/movies` | 见下表 query | `{ message, data[], pagination, meta }` | `page/pageSize >= 1` |
-| Hybrid 统计 | `GET /api/movies/hybrid-stats` | 无 | `{ message, data: 累计指标 }` | 进程内累计，重启清零 |
+| Hybrid 统计 | `GET /api/movies/hybrid-stats` | 无 | `{ message, data: 累计指标 }` | 进程内累计 + MySQL 事件持久化 |
 | 电影详情 | `GET /api/movies/:id` | 路径 `id` 为本地主键 | `{ message, data: movie }` | `id` 须为数字 |
 
 ### Query 参数（列表）
@@ -67,9 +67,9 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 
 ### 观测接口
 
-`GET /api/movies/hybrid-stats` 返回自进程启动以来的累计计数与比率，用于观察本地命中率与 TMDB fallback 成本（Demo 环境内存统计，生产应改为持久化或日志系统）。
+`GET /api/movies/hybrid-stats` 返回自进程启动以来的累计计数与比率，用于观察本地命中率与 TMDB fallback 成本。每次 Hybrid 关键词请求还会写入 MySQL 表 `hybrid_search_events`（见 [`server/utils/hybridSearchMetrics.js`](../../server/utils/hybridSearchMetrics.js)）；仪表盘 `GET /api/analytics/overview` 可读取持久化快照。
 
-**前端展示**：仅在用户输入关键词（`searchTerm` 非空）时显示「本次来源」提示与 Hybrid 观测折叠面板；点击「重置筛选」清空关键词后隐藏，避免将服务端累计值误读为当前列表状态。累计计数本身不随重置清零（重启后端进程清零）。
+**前端展示**：仅在用户输入关键词（`searchTerm` 非空）时显示「本次来源」提示与 Hybrid 观测折叠面板；点击「重置筛选」清空关键词后隐藏，避免将服务端累计值误读为当前列表状态。进程内累计计数不随重置清零（重启后端进程清零）；MySQL 事件表保留历史记录。
 
 **关键词请求数口径**：`hybridKeywordRequests` 统计的是满足 `hybrid=1` 且带 `q` 的 `GET /api/movies` **HTTP 请求次数**，不是「点击搜索按钮」次数。同一关键词下改排序/筛选/分页、刷新页面等会再次请求并各计 1 次；单次请求内部的 TMDB 回写与二次查本地不会额外 +1。
 

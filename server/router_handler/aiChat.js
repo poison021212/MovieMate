@@ -1,15 +1,77 @@
-const jwt = require('jsonwebtoken')
 const { chat_schema, create_session_schema } = require('../schema/ai.js')
 const sessionStore = require('../utils/aiSessionStore.js')
-const { buildTasteProfile, runChatTurn, getProfileFeedMovies } = require('../utils/recommendCore.js')
+const { buildTasteProfile } = require('../utils/recommendCore.js')
+const {
+  runAgentChatTurn,
+  runAgentChatTurnCore,
+  streamAgentReplyText,
+} = require('../utils/agentRuntime.js')
+const { checkAgentChatRateLimit } = require('../utils/agentChatRateLimit.js')
+const { maybeSummarizeSession } = require('../utils/sessionSummary.js')
 
 function getUsernameFromRequest(req) {
   return req.user?.username || null
 }
 
+function titleFromMessage(text) {
+  return text.slice(0, 24) + (text.length > 24 ? '…' : '')
+}
+
+async function resolveChatSession(username, sessionId, message) {
+  let sid = sessionId ? Number(sessionId) : null
+  let sessionRecord = null
+  if (sid) {
+    sessionRecord = await sessionStore.getSessionForUser(username, sid)
+    if (!sessionRecord) {
+      sid = await sessionStore.createSession(username, titleFromMessage(message))
+      sessionRecord = { title: titleFromMessage(message), summary: null }
+    }
+  } else {
+    sid = await sessionStore.createSession(username, titleFromMessage(message))
+    sessionRecord = { title: titleFromMessage(message), summary: null }
+  }
+  return { sessionId: sid, sessionRecord }
+}
+
+async function finalizeChatTurn({
+  username,
+  sessionId,
+  sessionRecord,
+  message,
+  result,
+  history,
+}) {
+  await sessionStore.appendMessage(sessionId, 'user', message, null, null)
+  await sessionStore.appendMessage(sessionId, 'assistant', result.reply, result.movies, result.meta)
+
+  const shouldRenameDefaultSession =
+    sessionRecord?.title === '新会话' && history.length === 0
+  await sessionStore.touchSession(
+    sessionId,
+    shouldRenameDefaultSession ? titleFromMessage(message) : null
+  )
+
+  const allMessages = [
+    ...history,
+    { role: 'user', content: message },
+    { role: 'assistant', content: result.reply },
+  ]
+  const summary = await maybeSummarizeSession({
+    sessionId,
+    messages: allMessages,
+    existingSummary: sessionRecord?.summary,
+  })
+  if (summary && summary !== sessionRecord?.summary) {
+    await sessionStore.updateSessionSummary(sessionId, summary)
+  }
+
+  return { sessionId, summary }
+}
+
 exports.getProfileFeed = async (req, res) => {
   try {
     const username = getUsernameFromRequest(req)
+    const { getProfileFeedMovies } = require('../utils/recommendCore.js')
     const feed = await getProfileFeedMovies(username, 12)
     res.json({ success: true, ...feed })
   } catch (err) {
@@ -69,49 +131,38 @@ exports.postRecommendChat = async (req, res) => {
   if (error) return res.cc(error.details[0].message, 400)
 
   const { message } = req.body
-  let sessionId = req.body.sessionId ? Number(req.body.sessionId) : null
   const username = req.user.username
 
-  const titleFromMessage = (text) => text.slice(0, 24) + (text.length > 24 ? '…' : '')
-
   try {
-    let sessionRecord = null
-    if (sessionId) {
-      sessionRecord = await sessionStore.getSessionForUser(username, sessionId)
-      if (!sessionRecord) return res.cc('会话不存在', 404)
-    } else {
-      sessionId = await sessionStore.createSession(username, titleFromMessage(message))
-      sessionRecord = { title: titleFromMessage(message) }
-    }
-
+    checkAgentChatRateLimit(username)
+    const { sessionId, sessionRecord } = await resolveChatSession(
+      username,
+      req.body.sessionId ? Number(req.body.sessionId) : null,
+      message
+    )
     const history = await sessionStore.listMessages(sessionId)
     const tasteProfile = await buildTasteProfile(username)
 
-    await sessionStore.appendMessage(sessionId, 'user', message, null, null)
-
-    const result = await runChatTurn({
+    const result = await runAgentChatTurn({
       message,
       tasteProfile,
       historyMessages: history,
+      username,
+      sessionSummary: sessionRecord?.summary,
     })
 
-    await sessionStore.appendMessage(
+    const finalized = await finalizeChatTurn({
+      username,
       sessionId,
-      'assistant',
-      result.reply,
-      result.movies,
-      result.meta
-    )
-    const shouldRenameDefaultSession =
-      sessionRecord?.title === '新会话' && history.length === 0
-    await sessionStore.touchSession(
-      sessionId,
-      shouldRenameDefaultSession ? titleFromMessage(message) : null
-    )
+      sessionRecord,
+      message,
+      result,
+      history,
+    })
 
     res.json({
       success: true,
-      sessionId,
+      sessionId: finalized.sessionId,
       assistantMessage: result.reply,
       movies: result.movies,
       meta: result.meta,
@@ -122,6 +173,74 @@ exports.postRecommendChat = async (req, res) => {
     res.status(status).json({
       error: { message: err.message || '对话推荐失败' },
     })
+  }
+}
+
+exports.postRecommendChatStream = async (req, res) => {
+  const { error } = chat_schema.validate(req.body || {})
+  if (error) return res.cc(error.details[0].message, 400)
+
+  const { message } = req.body
+  const username = req.user.username
+
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders?.()
+
+  const sendEvent = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+  }
+
+  try {
+    checkAgentChatRateLimit(username)
+    const { sessionId, sessionRecord } = await resolveChatSession(
+      username,
+      req.body.sessionId ? Number(req.body.sessionId) : null,
+      message
+    )
+    sendEvent('session', { sessionId })
+
+    const history = await sessionStore.listMessages(sessionId)
+    const tasteProfile = await buildTasteProfile(username)
+
+    const result = await runAgentChatTurnCore({
+      message,
+      tasteProfile,
+      historyMessages: history,
+      username,
+      sessionSummary: sessionRecord?.summary,
+      onEvent: (ev) => {
+        if (ev.type === 'plan') sendEvent('plan', { steps: ev.steps })
+        if (ev.type === 'trace') sendEvent('trace', { entry: ev.entry })
+        if (ev.type === 'error') sendEvent('error', { message: ev.message })
+      },
+    })
+
+    for await (const chunk of streamAgentReplyText(result.reply)) {
+      sendEvent('token', { text: chunk })
+    }
+
+    const finalized = await finalizeChatTurn({
+      username,
+      sessionId,
+      sessionRecord,
+      message,
+      result,
+      history,
+    })
+
+    sendEvent('done', {
+      sessionId: finalized.sessionId,
+      assistantMessage: result.reply,
+      movies: result.movies,
+      meta: result.meta,
+    })
+    res.end()
+  } catch (err) {
+    console.error('recommend/chat/stream', err)
+    sendEvent('error', { message: err.message || '流式对话失败' })
+    res.end()
   }
 }
 

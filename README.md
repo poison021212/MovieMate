@@ -13,7 +13,9 @@
 | [movie-detail-favorite.md](docs/features/movie-detail-favorite.md) | 详情与收藏 |
 | [review-flow.md](docs/features/review-flow.md) | 影评 |
 | [swipe-mode.md](docs/features/swipe-mode.md) | 速览模式 |
-| [ai-recommendation.md](docs/features/ai-recommendation.md) | AI 推荐（画像列表 + 多轮会话） |
+| [ai-recommendation.md](docs/features/ai-recommendation.md) | AI 推荐（Tool-calling Agent + 多轮会话） |
+| [analytics-dashboard.md](docs/features/analytics-dashboard.md) | 数据洞察仪表盘（日快照 + AI 预测） |
+| [ops-console.md](docs/features/ops-console.md) | 运营控制台（用户封禁 / 评论审核 / 审计） |
 | [tmdb-sync.md](docs/features/tmdb-sync.md) | TMDB 同步脚本 |
 | [runtime-and-config.md](docs/features/runtime-and-config.md) | 环境与启动 |
 | [preview-change-summary-2026-08-04.md](docs/features/preview-change-summary-2026-08-04.md) | **本轮改动汇总与 Preview 指南** |
@@ -35,7 +37,7 @@ MovieMate-master/
 
 - **Node.js** 20 LTS（推荐；避免使用过新的未验证版本）
 - **MySQL** 8.x（或 5.7+）
-- （可选）AI 推荐：`TMDB_ACCESS_TOKEN`、`DASHSCOPE_API_KEY`
+- （可选）AI 推荐：`TMDB_ACCESS_TOKEN`；LLM 默认本机 [Ollama](https://ollama.com/download)（见下方），或配置 `LLM_API_KEY` 走云端
 
 ## 首次运行
 
@@ -85,7 +87,13 @@ copy server\.env.example server\.env
 | `JWT_SECRET` | 任意足够长的随机字符串 |
 | `APP_PUBLIC_URL` | 邮箱验证/重置链接前缀，默认 `http://localhost:5173` |
 
-AI 推荐功能需额外配置 `TMDB_ACCESS_TOKEN` 与 `DASHSCOPE_API_KEY`，不配置时其余页面仍可正常使用。
+AI 推荐需 `TMDB_ACCESS_TOKEN`（搜片/详情）。**LLM 默认连本机 Ollama**（免费、无需云端 Key）：
+
+1. 安装 [Ollama](https://ollama.com/download)
+2. `ollama pull qwen2.5:7b`
+3. 保持 Ollama 运行（Windows 安装后一般已在后台）
+
+未装 Ollama 时，荐片页走本地口味降级，其余页面仍可用。换 DeepSeek/千问等云端模型：改 `server/.env` 中 `LLM_BASE_URL`、`LLM_MODEL`、`LLM_API_KEY`（详见 [runtime-and-config.md](docs/features/runtime-and-config.md)）。
 
 认证升级（已有库）：`mysql -u root -p movie_db < server/sql/auth_upgrade.sql`。详见 [auth-security.md](docs/features/auth-security.md)。
 
@@ -114,7 +122,7 @@ npm run dev:client
 | `Cannot find module 'dotenv'` | 在根目录重新 `npm install` |
 | `数据库连接失败` | 检查 MySQL 是否启动、`server/.env` 账号密码、是否已执行 `init.sql` |
 | 前端白屏 / 模块找不到 | 在根目录 `npm install`，勿只在旧根目录单独装后端依赖 |
-| AI 推荐报错 | 检查 `TMDB_ACCESS_TOKEN`、`DASHSCOPE_API_KEY` 是否有效 |
+| AI 推荐报错 | 检查 `TMDB_ACCESS_TOKEN`；Ollama 是否运行且已 `ollama pull qwen2.5:7b`；或检查 `LLM_API_KEY` / `LLM_BASE_URL` |
 
 ## 生产构建（前端）
 
@@ -187,14 +195,14 @@ SELECT tmdb_id, COUNT(*) c FROM movies WHERE tmdb_id IS NOT NULL GROUP BY tmdb_i
 
 ## 2 分钟演示脚本（答辩 / 录屏）
 
-前置：`init.sql` 已执行，可选 `demo_seed.sql`；`server/.env` 含 DB、JWT、**TMDB、DashScope**；`npm run dev` 已启动。
+前置：`init.sql` 已执行，可选 `demo_seed.sql`；`server/.env` 含 DB、JWT、**TMDB**；本机 Ollama 已 `pull qwen2.5:7b`（或配置 `LLM_API_KEY`）；`npm run dev` 已启动。
 
-Cloud Agent 上可将 `TMDB_ACCESS_TOKEN`、`DASHSCOPE_API_KEY` 配在 [Cloud Agents Secrets](https://cursor.com/dashboard/cloud-agents)，并在环境中 **Update Existing Env** 后重跑；或本地执行 `server/scripts/sync-env-from-secrets.sh` 写入 `server/.env`（勿提交）。
+Cloud Agent 上可将 `TMDB_ACCESS_TOKEN`、`LLM_API_KEY` 配在 [Cloud Agents Secrets](https://cursor.com/dashboard/cloud-agents)，并在环境中 **Update Existing Env** 后重跑；或本地执行 `server/scripts/sync-env-from-secrets.sh` 写入 `server/.env`（勿提交）。
 
 | 步骤 | 操作 | 预期 |
 | --- | --- | --- |
 | 1 | 打开首页，搜索关键词并观察列表上方 **来源**（本地 / TMDB 回写） | `meta.source` 与 hybrid 统计可展开查看 |
-| 2 | 登录 `demo_user` / `123456` | JWT 写入本地存储 |
+| 2 | 登录 `demo_user` / `123456` | Refresh 写入 HttpOnly Cookie；access 仅内存 |
 | 3 | 进入 **AI 推荐**，输入「推荐几部悬疑片」 | 返回卡片；`meta.localMappedRatePercent` 较高；标签「已注入口味档案」 |
 | 4 | 点击 **查看详情** | 进入 `/movie/:localId` 站内页 |
 | 5 | 点击 **写笔记** 或滚动至观后笔记 | `#movie-review` 锚点定位表单 |

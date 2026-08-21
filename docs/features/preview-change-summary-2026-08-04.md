@@ -5,6 +5,8 @@
 - 最后核对日期：2026-08-04
 - 关联 PR：[GitHub PR #1](https://github.com/poison021212/MovieMate/pull/1)（以仓库实际 PR 为准）
 
+> **说明**：本文为 2026-08 录屏/答辩快照。现行环境变量、LLM 与登录会话契约以 [runtime-and-config.md](runtime-and-config.md)、[auth-security.md](auth-security.md) 为准。
+
 ## 1. 这轮改了什么（一句话）
 
 在原有电影社区 Demo 上，补齐 **Hybrid 搜索与 TMDB 同步**、**AI 推荐 grounding 与闭环**、**半 Agent 多轮会话**、**评论楼中楼**、**速览语音播报**，并修复若干前端稳定性问题。
@@ -27,7 +29,7 @@
 ### 3.1 首页 `/`
 
 - 搜索默认开启 **Hybrid**（本地优先，必要时 TMDB 回写）。
-- 可查看本次查询来源提示；可展开 **Hybrid 搜索统计**（进程内累计，重启后端清零）。
+- 可查看本次查询来源提示；可展开 **Hybrid 搜索统计**（进程内累计 + MySQL 事件持久化）。
 
 详见 [movie-list-query.md](movie-list-query.md)。
 
@@ -117,9 +119,10 @@
 | --- | --- | --- |
 | `DB_*`、`JWT_SECRET` | 是 | 登录、业务数据 |
 | `TMDB_ACCESS_TOKEN` | 否* | Hybrid 回退、AI 候选池、同步脚本 |
-| `DASHSCOPE_API_KEY` | 否* | AI 对话 / 单轮推荐 |
+| `LLM_BASE_URL` / `LLM_MODEL` | 否* | 默认本机 Ollama；见 [runtime-and-config.md](runtime-and-config.md) |
+| `LLM_API_KEY` | 否 | 云端 OpenAI 兼容 Key（可选） |
 
-\* 不配置时：除 AI 与 Hybrid 回退外，其余页面仍可用；AI 页会提示候选/密钥问题。
+\* 不配置 TMDB 时：除 Hybrid 回退与 AI 搜片外，其余页面仍可用。未启动 Ollama 时 AI 页走本地口味降级。
 
 Cloud Agent 可将 Secrets 同步到本地 `.env`（不提交）：
 
@@ -146,7 +149,7 @@ npm run dev
 
 - [ ] 首页搜索，观察 Hybrid 来源提示
 - [ ] 登录 `demo_user` / `123456`
-- [ ] `/ai-recommend` 左栏有海报与推荐；右栏能发消息（需 TMDB + DashScope）
+- [ ] `/ai-recommend` 左栏有海报与推荐；右栏能发消息（需 TMDB + 本机 Ollama 或 `LLM_API_KEY`）
 - [ ] 进入某电影详情：发评论、回复、删回复（均有确认弹窗）
 - [ ] 取消收藏有确认弹窗
 - [ ] `/swipe` 点击喇叭播报简介
@@ -177,8 +180,8 @@ npm run dev
 
 ## 10. 已知边界（演示时如实说明即可）
 
-- Hybrid 统计为**单进程内存**累计，重启后端清零。
-- AI 质量依赖 TMDB 候选池与 DashScope；网络或密钥异常时返回 503/422/500，属预期降级。
+- Hybrid 统计：进程内累计重启清零；事件同时写入 `hybrid_search_events`。
+- AI 质量依赖 TMDB 候选池与 LLM（默认 Ollama）；未启动或网络异常时走降级，属预期行为。
 - 浏览器 TTS 音色因系统而异；后续可换云 TTS（见 swipe-mode 文档后续扩展）。
 - `movie.js` 与 `movieUpsert.js` 仍存在部分重复 upsert 逻辑，后续可收敛重构（不影响当前演示）。
 

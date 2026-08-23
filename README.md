@@ -14,8 +14,8 @@
 | [review-flow.md](docs/features/review-flow.md) | 影评 |
 | [swipe-mode.md](docs/features/swipe-mode.md) | 速览模式 |
 | [ai-recommendation.md](docs/features/ai-recommendation.md) | AI 推荐（Tool-calling Agent + 多轮会话） |
-| [analytics-dashboard.md](docs/features/analytics-dashboard.md) | 数据洞察仪表盘（日快照 + AI 预测） |
-| [ops-console.md](docs/features/ops-console.md) | 运营控制台（用户封禁 / 评论审核 / 审计） |
+| [analytics-dashboard.md](docs/features/analytics-dashboard.md) | 数据洞察仪表盘（日快照 + AI 预测；`userCount` 仅 staff 可见） |
+| [ops-console.md](docs/features/ops-console.md) | 运营控制台（预设角色 moderator/operator/admin、角色管理、审计） |
 | [tmdb-sync.md](docs/features/tmdb-sync.md) | TMDB 同步脚本 |
 | [runtime-and-config.md](docs/features/runtime-and-config.md) | 环境与启动 |
 | [preview-change-summary-2026-08-04.md](docs/features/preview-change-summary-2026-08-04.md) | **本轮改动汇总与 Preview 指南** |
@@ -96,6 +96,17 @@ AI 推荐需 `TMDB_ACCESS_TOKEN`（搜片/详情）。**LLM 默认连本机 Olla
 未装 Ollama 时，荐片页走本地口味降级，其余页面仍可用。换 DeepSeek/千问等云端模型：改 `server/.env` 中 `LLM_BASE_URL`、`LLM_MODEL`、`LLM_API_KEY`（详见 [runtime-and-config.md](docs/features/runtime-and-config.md)）。
 
 认证升级（已有库）：`mysql -u root -p movie_db < server/sql/auth_upgrade.sql`。详见 [auth-security.md](docs/features/auth-security.md)。
+
+运营与仪表盘（已有库，按顺序执行）：
+
+```bash
+mysql -u root -p movie_db < server/sql/analytics_ops_upgrade.sql
+mysql -u root -p movie_db < server/sql/rbac_upgrade.sql
+# 按需设置首个系统管理员
+# UPDATE users SET role = 'admin' WHERE id = 1 LIMIT 1;
+```
+
+新库直接执行 `init.sql` 已含四档 `role`，无需再跑 `rbac_upgrade.sql`。角色与权限详见 [ops-console.md](docs/features/ops-console.md)。
 
 ### 4. 启动
 

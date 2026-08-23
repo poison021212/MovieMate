@@ -52,9 +52,10 @@ git checkout clean-structure
 4. 若库已存在且缺少新表：`mysql -u root -p movie_db < server/sql/ai_chat_and_replies.sql`
 5. 认证升级（邮箱验证 / refresh / 找回密码）：`mysql -u root -p movie_db < server/sql/auth_upgrade.sql`
 6. 分析与趋势字段（仪表盘）：`mysql -u root -p movie_db < server/sql/analytics_upgrade.sql`（列已存在时可忽略报错）
-7. 运营角色扩展：`mysql -u root -p movie_db < server/sql/rbac_upgrade.sql`（需先执行 `analytics_ops_upgrade.sql`）
-8. `copy server\.env.example server\.env` 并填写 `DB_*`、`JWT_SECRET`、`APP_PUBLIC_URL`
-9. 根目录 `npm run dev`（或分别 `npm run dev:server` / `npm run dev:client`）
+7. 运营与 Hybrid 事件表：`mysql -u root -p movie_db < server/sql/analytics_ops_upgrade.sql`（含 `users.role` 初版与 `admin_audit_log`）
+8. 运营角色扩展（四档 role）：`mysql -u root -p movie_db < server/sql/rbac_upgrade.sql`（**需先执行步骤 7**；新库 `init.sql` 已含四档 `role`，可跳过本步）
+9. `copy server\.env.example server\.env` 并填写 `DB_*`、`JWT_SECRET`、`APP_PUBLIC_URL`
+10. 根目录 `npm run dev`（或分别 `npm run dev:server` / `npm run dev:client`）
 
 端口默认：API `1337`，前端 `5173`（Vite 代理 `/api` -> 1337）。
 

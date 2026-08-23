@@ -35,6 +35,21 @@
 | 忘记密码 | `POST /api/auth/forgot-password` | 无 | 统一成功文案，防枚举 |
 | 重置密码 | `POST /api/auth/reset-password` | 无 | `{ token, password }` |
 
+### `publicUser` 字段
+
+登录、刷新、`GET /api/auth/me` 返回的 `user` 对象（[`server/router_handler/auth.js`](../../server/router_handler/auth.js) 中 `publicUser`）：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | number | 用户主键 |
+| `username` | string | 用户名 |
+| `email` | string | 邮箱 |
+| `emailVerified` | boolean | 是否已验证邮箱 |
+| `status` | string | `active` / `locked` / `banned` |
+| `role` | string | `user` / `moderator` / `operator` / `admin`；前端用于运营台入口显隐（见 [ops-console.md](./ops-console.md)） |
+
+密码哈希、refresh token 等敏感字段**不**出现在 `publicUser` 中。
+
 ## 4. Cookie 参数
 
 | 属性 | 值 |
@@ -83,6 +98,7 @@
 - [ ] 连续登录失败触发限流（429）
 - [ ] Refresh 轮换后旧 refresh 失效
 - [ ] 鉴权中间件不打印 Authorization 明文
+- [ ] 登录后 `user.role === 'user'` 时顶栏无「运营台」；staff 角色可见（见 [ops-console.md](./ops-console.md)）
 
 ## 9. 实现位置
 

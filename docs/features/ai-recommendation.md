@@ -2,7 +2,7 @@
 
 - 状态：已实现（荐片 + 事实问答 + 话题闲聊）
 - 负责人：MovieMate 维护者
-- 最后核对日期：2026-08-21
+- 最后核对日期：2026-08-23
 
 ## 1. 目标
 
@@ -41,7 +41,7 @@
 | 删除会话 | `DELETE /api/recommend/sessions/:id` | Bearer | 204 |
 | 会话消息 | `GET /api/recommend/sessions/:id/messages` | Bearer | 含 `meta.agentTrace` |
 | 多轮对话 | `POST /api/recommend/chat` | Bearer | `{ sessionId?, message }` |
-| 流式对话 | `POST /api/recommend/chat/stream` | Bearer | SSE：`plan` / `trace` / `token` / `done` |
+| 流式对话 | `POST /api/recommend/chat/stream` | Bearer | SSE：`plan` / `trace` / `token` / `done`。**工具循环非流式**；工具结束后「写回复」走 LLM `stream: true`，`token` 为增量原文（不是整段后再按字切片） |
 
 `meta.mode` 取值：`recommend` | `qa` | `chat`。
 
@@ -78,7 +78,9 @@
 **编排**：计划外工具跳过；工具失败重试 1 次；TMDB 失败降级本地搜索（推荐模式）；整轮 LLM 失败时 recommend 走规则片单（**不拼接用户原话**），qa/chat 优先用已检索详情拼 grounded 回复。  
 **本轮优先**：系统提示要求 Agent 只服务当前用户消息，不因历史会话搜无关片名。  
 **记忆**：会话 ≥8 轮写入 `ai_recommend_sessions.summary`。  
-**限流**：每用户每分钟 12 次。
+**限流**：每用户每分钟 12 次。  
+**上下文预算**：按字符截断（默认 system 4k / 历史 6k / 每条工具 2k / 总计 16k，可用 `LLM_PROMPT_BUDGET_*` 覆盖）。超限时优先保留当前用户消息与最近工具结果，从最旧历史开始裁。实现：[`server/utils/promptBudget.js`](../../server/utils/promptBudget.js)。  
+**流式**：`plan` / `trace` 在工具阶段发出；最终回复由独立一轮无工具 LLM 流式生成后落库。写回复失败则回退 `finish_recommend` 草稿或 `buildDegradedReply`。
 
 ## 6. 数据表
 
@@ -93,12 +95,14 @@
 - [ ] 「《盗梦空间》导演/制片人是谁」→ 基于工具事实，`movies` 可空
 - [ ] 「聊聊诺兰非线性叙事」→ 有回复、不强推片、左栏仍是猜你喜欢
 - [ ] 每轮发送后右栏「执行计划/工具轨迹/模式标签」随本轮刷新，不叠加上一轮
+- [ ] 流式：工具轨迹先出，随后 `token` 增量出现（非整段生成后再匀速切片）
 - [ ] `npm run build -w moviemate-client` 通过
 
 ## 8. 实现位置
 
-- LLM 客户端：[`server/utils/llmClient.js`](../../server/utils/llmClient.js)（默认 Ollama；可改 `.env` 切云端）
+- LLM 客户端：[`server/utils/llmClient.js`](../../server/utils/llmClient.js)（默认 Ollama；可改 `.env` 切云端；`chatCompletionsStream` 解析增量 token）
 - Agent 运行时：[`server/utils/agentRuntime.js`](../../server/utils/agentRuntime.js)
+- Prompt 预算：[`server/utils/promptBudget.js`](../../server/utils/promptBudget.js)
 - 意图检测：[`server/utils/recommendCore.js`](../../server/utils/recommendCore.js) `detectChatMode`
 - 会话：[`server/router_handler/aiChat.js`](../../server/router_handler/aiChat.js)
 - 前端：[`client/src/components/AIRecommend.jsx`](../../client/src/components/AIRecommend.jsx)

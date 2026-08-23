@@ -150,6 +150,58 @@ async function chatCompletions({
   return data.choices?.[0]?.message || { role: 'assistant', content: '' }
 }
 
+function extractStreamDelta(line) {
+  const trimmed = String(line || '').trim()
+  if (!trimmed.startsWith('data:')) return { done: false, text: '' }
+  const data = trimmed.slice(5).trim()
+  if (!data || data === '[DONE]') return { done: data === '[DONE]', text: '' }
+  try {
+    const json = JSON.parse(data)
+    const text = json.choices?.[0]?.delta?.content || json.choices?.[0]?.message?.content || ''
+    return { done: Boolean(json.choices?.[0]?.finish_reason), text }
+  } catch {
+    return { done: false, text: '' }
+  }
+}
+
+async function* iterateChatCompletionStream(response) {
+  if (!response?.body) {
+    throw new Error('LLM 流式响应为空')
+  }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split(/\r?\n/)
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        const parsed = extractStreamDelta(line)
+        if (parsed.text) yield parsed.text
+        if (line.trim() === 'data: [DONE]' || line.trim() === 'data:[DONE]') return
+      }
+    }
+    if (buffer) {
+      const parsed = extractStreamDelta(buffer)
+      if (parsed.text) yield parsed.text
+    }
+  } finally {
+    try {
+      reader.releaseLock()
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+async function* chatCompletionsStream(options = {}) {
+  const response = await chatCompletions({ ...options, stream: true })
+  yield* iterateChatCompletionStream(response)
+}
+
 async function chatCompletionsText(options = {}) {
   const message = await chatCompletions(options)
   return message?.content || ''
@@ -163,5 +215,7 @@ module.exports = {
   hasLlm,
   getLlmConfig,
   chatCompletions,
+  chatCompletionsStream,
+  iterateChatCompletionStream,
   chatCompletionsText,
 }

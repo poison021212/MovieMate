@@ -3,7 +3,8 @@ const { chatResponse_schema } = require('../schema/ai.js')
 const { buildTasteProfile, getProfileFeedMovies, detectChatMode } = require('./recommendCore.js')
 const { resolveLocalMovieIdsForCandidates } = require('./movieUpsert.js')
 const { getTrendSummary } = require('./analyticsCore.js')
-const { hasLlm, chatCompletions, getLlmConfig } = require('./llmClient.js')
+const { hasLlm, chatCompletions, chatCompletionsStream, getLlmConfig } = require('./llmClient.js')
+const { applyPromptBudget } = require('./promptBudget.js')
 
 const TMDB_TOKEN = process.env.TMDB_ACCESS_TOKEN
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
@@ -316,14 +317,40 @@ async function callQwenAgent(messages, useTools = true, stream = false) {
   if (!hasLlm()) {
     throw new Error('缺少 LLM 配置：请启动本机 Ollama，或设置 LLM_API_KEY')
   }
-  const result = await chatCompletions({
-    messages,
+  return chatCompletions({
+    messages: applyPromptBudget(messages),
     tools: useTools ? AGENT_TOOLS : undefined,
     temperature: 0.6,
     stream,
   })
-  if (stream) return result
-  return result
+}
+
+async function streamWriteUserReply({ convo, chatMode, draftReply, emit }) {
+  const hint =
+    '根据以上对话与工具结果，用中文写出给用户的最终回复。只输出正文，不要 JSON，不要调用工具。' +
+    `当前模式：${chatMode}。不要编造工具未提供的事实。` +
+    (chatMode === 'recommend' ? '简要说明推荐理由即可，不必重复罗列完整片单。' : '') +
+    (draftReply ? `\n可参考草稿：${String(draftReply).slice(0, 500)}` : '')
+
+  const writeConvo = applyPromptBudget([
+    ...convo,
+    { role: 'system', content: hint },
+  ])
+
+  let full = ''
+  for await (const chunk of chatCompletionsStream({
+    messages: writeConvo,
+    temperature: 0.6,
+  })) {
+    if (!chunk) continue
+    full += chunk
+    emit('token', { text: chunk })
+  }
+  return full.trim()
+}
+
+function emitReplyIfStreaming(emit, reply) {
+  if (reply) emit('token', { text: reply })
 }
 
 async function searchLocalMovies(args) {
@@ -660,6 +687,7 @@ async function runAgentChatTurnCore({
         agentTrace,
         err.message
       )
+      emitReplyIfStreaming(emit, degraded.reply)
       emit('done', { result: degraded })
       return degraded
     }
@@ -758,10 +786,12 @@ async function runAgentChatTurnCore({
       agentTrace.push({ tool: 'fallback_candidates', ok: true, degraded: true })
     } else if (chatMode === 'recommend') {
       const degraded = await buildDegradedReply(username, message, tasteProfile, chatMode, ctx, agentTrace)
+      emitReplyIfStreaming(emit, degraded.reply)
       emit('done', { result: degraded })
       return degraded
     } else {
       const fallback = buildNonRecommendFallback(chatMode, ctx, agentTrace)
+      emitReplyIfStreaming(emit, fallback.reply)
       emit('done', { result: { ...fallback, movies: fallback.movies || [] } })
       return {
         reply: fallback.reply,
@@ -794,6 +824,46 @@ async function runAgentChatTurnCore({
     finalPayload.movies = []
   }
 
+  if (typeof onEvent === 'function') {
+    try {
+      const streamed = await streamWriteUserReply({
+        convo,
+        chatMode,
+        draftReply: finalPayload.reply,
+        emit,
+      })
+      if (streamed) {
+        finalPayload.reply = streamed
+        agentTrace.push({ tool: 'stream_write_reply', ok: true, latencyMs: 0 })
+      } else if (finalPayload.reply) {
+        emitReplyIfStreaming(emit, finalPayload.reply)
+      }
+    } catch (err) {
+      agentTrace.push({
+        tool: 'stream_write_reply',
+        ok: false,
+        error: err.message,
+        latencyMs: 0,
+      })
+      if (finalPayload.reply) {
+        emitReplyIfStreaming(emit, finalPayload.reply)
+      } else {
+        const degraded = await buildDegradedReply(
+          username,
+          message,
+          tasteProfile,
+          chatMode,
+          ctx,
+          agentTrace,
+          err.message
+        )
+        emitReplyIfStreaming(emit, degraded.reply)
+        emit('done', { result: degraded })
+        return degraded
+      }
+    }
+  }
+
   const enrichedMovies = enrichAgentMovies(finalPayload.movies || [], ctx)
 
   const result = {
@@ -822,18 +892,9 @@ async function runAgentChatTurn(opts) {
   return runAgentChatTurnCore({ ...opts, onEvent: null })
 }
 
-async function* streamAgentReplyText(reply) {
-  const text = String(reply || '')
-  const chunkSize = 8
-  for (let i = 0; i < text.length; i += chunkSize) {
-    yield text.slice(i, i + chunkSize)
-  }
-}
-
 module.exports = {
   runAgentChatTurn,
   runAgentChatTurnCore,
-  streamAgentReplyText,
   AGENT_TOOLS,
   buildDegradedReply,
 }

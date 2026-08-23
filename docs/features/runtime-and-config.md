@@ -74,6 +74,7 @@ git checkout clean-structure
 | `LLM_API_KEY` | 否 | 云端 OpenAI 兼容 API Key；本机 Ollama 可留空 |
 | `DEEPSEEK_API_KEY` | 否 | 等同 `LLM_API_KEY` 的回退 |
 | `DASHSCOPE_API_KEY` | 否 | 千问 Key（配合千问 `LLM_BASE_URL` / `LLM_MODEL`） |
+| `LLM_PROMPT_BUDGET_SYSTEM` / `_HISTORY` / `_TOOL` / `_TOTAL` | 否 | Agent 上下文字符预算，默认 4000 / 6000 / 2000 / 16000 |
 
 **本机 Ollama（默认，免费）**
 

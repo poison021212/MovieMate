@@ -4,7 +4,6 @@ const { buildTasteProfile } = require('../utils/recommendCore.js')
 const {
   runAgentChatTurn,
   runAgentChatTurnCore,
-  streamAgentReplyText,
 } = require('../utils/agentRuntime.js')
 const { checkAgentChatRateLimit } = require('../utils/agentChatRateLimit.js')
 const { maybeSummarizeSession } = require('../utils/sessionSummary.js')
@@ -214,12 +213,9 @@ exports.postRecommendChatStream = async (req, res) => {
         if (ev.type === 'plan') sendEvent('plan', { steps: ev.steps })
         if (ev.type === 'trace') sendEvent('trace', { entry: ev.entry })
         if (ev.type === 'error') sendEvent('error', { message: ev.message })
+        if (ev.type === 'token' && ev.text) sendEvent('token', { text: ev.text })
       },
     })
-
-    for await (const chunk of streamAgentReplyText(result.reply)) {
-      sendEvent('token', { text: chunk })
-    }
 
     const finalized = await finalizeChatTurn({
       username,

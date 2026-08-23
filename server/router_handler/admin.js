@@ -1,4 +1,5 @@
 const db = require('../db/index.js')
+const { hasPermission, isStaff, ALL_ROLES } = require('../utils/roles.js')
 
 async function writeAudit(adminUsername, action, targetType, targetId, detail) {
   try {
@@ -23,6 +24,9 @@ exports.getAdminMe = async (req, res) => {
 }
 
 exports.listUsers = async (req, res) => {
+  if (!hasPermission(req.adminUser.role, 'users.manage')) {
+    return res.cc('无权限', 403)
+  }
   try {
     const [rows] = await db.query(
       `SELECT id, username, email, status, role, email_verified, created_at
@@ -35,6 +39,9 @@ exports.listUsers = async (req, res) => {
 }
 
 exports.updateUserStatus = async (req, res) => {
+  if (!hasPermission(req.adminUser.role, 'users.manage')) {
+    return res.cc('无权限', 403)
+  }
   const userId = Number(req.params.id)
   const status = req.body?.status
   if (!userId || !['active', 'locked', 'banned'].includes(status)) {
@@ -44,8 +51,19 @@ exports.updateUserStatus = async (req, res) => {
     const [rows] = await db.query('SELECT username, role FROM users WHERE id = ?', [userId])
     const target = rows[0]
     if (!target) return res.cc('用户不存在', 404)
-    if (target.role === 'admin' && status === 'banned') {
-      return res.cc('不能封禁管理员', 400)
+    if (target.username === req.adminUser.username) {
+      return res.cc('不能修改自己的账号状态', 400)
+    }
+    if (req.adminUser.role === 'operator' && isStaff(target.role)) {
+      return res.cc('运营不能修改后台账号状态', 403)
+    }
+    if (target.role === 'admin' && status !== 'active') {
+      const [adminRows] = await db.query(
+        "SELECT COUNT(*) AS c FROM users WHERE role = 'admin' AND status = 'active'"
+      )
+      if (Number(adminRows[0]?.c || 0) <= 1) {
+        return res.cc('不能封禁或锁定最后一个管理员', 400)
+      }
     }
     await db.query('UPDATE users SET status = ? WHERE id = ?', [status, userId])
     await writeAudit(req.adminUser.username, 'user.status', 'user', userId, {
@@ -58,7 +76,46 @@ exports.updateUserStatus = async (req, res) => {
   }
 }
 
+exports.updateUserRole = async (req, res) => {
+  if (!hasPermission(req.adminUser.role, 'users.role')) {
+    return res.cc('无权限', 403)
+  }
+  const userId = Number(req.params.id)
+  const role = req.body?.role
+  if (!userId || !ALL_ROLES.includes(role)) {
+    return res.cc('参数无效', 400)
+  }
+  try {
+    const [rows] = await db.query('SELECT username, role FROM users WHERE id = ?', [userId])
+    const target = rows[0]
+    if (!target) return res.cc('用户不存在', 404)
+    if (target.username === req.adminUser.username) {
+      return res.cc('不能修改自己的角色', 400)
+    }
+    if (target.role === 'admin' && role !== 'admin') {
+      const [adminRows] = await db.query(
+        "SELECT COUNT(*) AS c FROM users WHERE role = 'admin' AND status = 'active'"
+      )
+      if (Number(adminRows[0]?.c || 0) <= 1) {
+        return res.cc('不能降级最后一个管理员', 400)
+      }
+    }
+    await db.query('UPDATE users SET role = ? WHERE id = ?', [role, userId])
+    await writeAudit(req.adminUser.username, 'user.role', 'user', userId, {
+      role,
+      previousRole: target.role,
+      targetUsername: target.username,
+    })
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: { message: '更新用户角色失败' } })
+  }
+}
+
 exports.listReviews = async (req, res) => {
+  if (!hasPermission(req.adminUser.role, 'reviews.moderate')) {
+    return res.cc('无权限', 403)
+  }
   try {
     const [rows] = await db.query(
       `SELECT r.id, r.movieId, r.username, r.rating, r.content, r.date, m.title AS movieTitle
@@ -74,6 +131,9 @@ exports.listReviews = async (req, res) => {
 }
 
 exports.deleteReview = async (req, res) => {
+  if (!hasPermission(req.adminUser.role, 'reviews.moderate')) {
+    return res.cc('无权限', 403)
+  }
   const reviewId = Number(req.params.id)
   if (!reviewId) return res.cc('评论 id 无效', 400)
   try {
@@ -89,6 +149,9 @@ exports.deleteReview = async (req, res) => {
 }
 
 exports.listAuditLog = async (req, res) => {
+  if (!hasPermission(req.adminUser.role, 'audit.read')) {
+    return res.cc('无权限', 403)
+  }
   try {
     const [rows] = await db.query(
       `SELECT id, admin_username, action, target_type, target_id, detail, created_at

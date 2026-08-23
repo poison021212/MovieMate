@@ -6,6 +6,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useLocation } from 'react-router-dom';
 import { logout } from '@/store/Slice/authSlice';
 import { useLogoutMutation } from '@/store/API/authApi';
+import { isStaff } from '@/utils/roles';
 
 const { Header, Content } = AntLayout;
 
@@ -38,14 +39,16 @@ const Layout = (props) => {
     icon: <MessageOutlined />,
     label: <Link to="/profile-review">我的评论</Link>
   },
-  {
-    type: 'divider',
-  },
-  {
-    key: 'admin',
-    icon: <SettingOutlined />,
-    label: <Link to="/admin">运营台</Link>,
-  }]
+  ...(isStaff(auth.userInfo?.role)
+    ? [
+        { type: 'divider' },
+        {
+          key: 'admin',
+          icon: <SettingOutlined />,
+          label: <Link to="/admin">运营台</Link>,
+        },
+      ]
+    : [])]
   const logoutConfirm = () => {
     Modal.confirm({
       title: "确认退出",
@@ -84,7 +87,7 @@ const Layout = (props) => {
           <Menu.Item key="dashboard" icon={<BarChartOutlined />}>
             <Link to="/dashboard">数据洞察</Link>
           </Menu.Item>
-          {auth.isLogin && (
+          {auth.isLogin && isStaff(auth.userInfo?.role) && (
             <Menu.Item key="admin" icon={<SettingOutlined />}>
               <Link to="/admin">运营台</Link>
             </Menu.Item>

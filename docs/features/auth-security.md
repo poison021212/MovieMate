@@ -1,7 +1,7 @@
 # 认证与安全
 
 - 状态：已实现（Phase 1 + Phase 2 基础；Phase 3 评估）
-- 最后核对日期：2026-08-21
+- 最后核对日期：2026-08-23
 
 ## 1. 目标
 
@@ -27,10 +27,10 @@
 | --- | --- | --- | --- |
 | 注册 | `POST /api/auth/local/register` | 无 | 注册后需验证邮箱 |
 | 登录 | `POST /api/auth/local` | 无 | Set-Cookie refresh；JSON：`accessToken` + `user`（无 refreshToken） |
-| 当前用户 | `GET /api/auth/me` | Bearer | `{ user }` |
+| 当前用户 | `GET /api/auth/me` | Bearer | `{ user }`（含 `role`） |
 | 验证邮箱 | `POST /api/auth/verify-email` | 无 | `{ token }` |
 | 重发验证 | `POST /api/auth/resend-verification` | 无 | `{ email }` |
-| 刷新令牌 | `POST /api/auth/refresh` | Cookie（可选 body 兼容） | 轮换 refresh Cookie；返回新 access + user |
+| 刷新令牌 | `POST /api/auth/refresh` | Cookie（可选 body 兼容） | 轮换 refresh Cookie；返回新 access + user（含 `role`） |
 | 退出 | `POST /api/auth/logout` | Bearer | 撤销 session + clearCookie |
 | 忘记密码 | `POST /api/auth/forgot-password` | 无 | 统一成功文案，防枚举 |
 | 重置密码 | `POST /api/auth/reset-password` | 无 | `{ token, password }` |
@@ -49,7 +49,7 @@
 
 ## 5. 数据表
 
-- `users.email_verified`、`users.status`（active/locked/banned）
+- `users.email_verified`、`users.status`（active/locked/banned）、`users.role`（user/moderator/operator/admin，见 [ops-console.md](./ops-console.md)）
 - `email_verification_tokens`、`password_reset_tokens`、`refresh_sessions`
 
 增量脚本：[server/sql/auth_upgrade.sql](../../server/sql/auth_upgrade.sql)；新库见 [init.sql](../../server/sql/init.sql)。

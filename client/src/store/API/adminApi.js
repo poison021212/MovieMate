@@ -22,6 +22,14 @@ const adminApi = createApi({
       }),
       invalidatesTags: ['AdminUsers', 'AdminAudit'],
     }),
+    updateUserRole: builder.mutation({
+      query: ({ id, role }) => ({
+        url: `admin/users/${id}/role`,
+        method: 'PATCH',
+        body: { role },
+      }),
+      invalidatesTags: ['AdminUsers', 'AdminAudit'],
+    }),
     listAdminReviews: builder.query({
       query: () => 'admin/reviews',
       providesTags: ['AdminReviews'],
@@ -44,6 +52,7 @@ export const {
   useGetAdminMeQuery,
   useListAdminUsersQuery,
   useUpdateUserStatusMutation,
+  useUpdateUserRoleMutation,
   useListAdminReviewsQuery,
   useDeleteAdminReviewMutation,
   useListAdminAuditQuery,

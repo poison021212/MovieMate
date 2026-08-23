@@ -1,7 +1,7 @@
 # 数据洞察仪表盘
 
 - 状态：已实现
-- 最后核对日期：2026-08-21
+- 最后核对日期：2026-08-23
 
 ## 1. 目标
 
@@ -16,7 +16,7 @@
 
 | 场景 | Method + Path | 鉴权 | 响应 `data` |
 | --- | --- | --- | --- |
-| 平台概览 | `GET /api/analytics/overview` | 无 | 片库/用户/评论计数 + hybrid 快照（MySQL 持久化） |
+| 平台概览 | `GET /api/analytics/overview` | 可选 Bearer | 片库/评论计数 + hybrid 快照；**`userCount` 仅 staff 可见**（普通用户响应不含该字段） |
 | 类型分布 | `GET /api/analytics/genres` | 无 | `[{ genre, count }]` |
 | 年份趋势 | `GET /api/analytics/year-trends` | 无 | `[{ year, count, avgRating, avgPopularity? }]` |
 | 热度 Top | `GET /api/analytics/top-popular?limit=10` | 无 | 电影列表 |
@@ -65,6 +65,7 @@ npm run snapshot:analytics:seed -w moviemate-server
 ## 7. 验收
 
 - [ ] `/dashboard` 展示类型饼图、年份折线、热度 Top
+- [ ] 普通用户概览无「注册用户」卡片；staff 登录后可见
 - [ ] 无足够快照时预测区显示「数据不足」
 - [ ] 有 LLM（本机 Ollama 或 `LLM_API_KEY`）时预测图含统计基线 + AI 虚线
 - [ ] 登录后「我的洞察」与收藏/评论一致

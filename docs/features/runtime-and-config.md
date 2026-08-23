@@ -2,7 +2,7 @@
 
 - 状态：已实现
 - 负责人：MovieMate 维护者
-- 最后核对日期：2026-08-21
+- 最后核对日期：2026-08-23
 
 ## 1. 目标
 
@@ -52,8 +52,9 @@ git checkout clean-structure
 4. 若库已存在且缺少新表：`mysql -u root -p movie_db < server/sql/ai_chat_and_replies.sql`
 5. 认证升级（邮箱验证 / refresh / 找回密码）：`mysql -u root -p movie_db < server/sql/auth_upgrade.sql`
 6. 分析与趋势字段（仪表盘）：`mysql -u root -p movie_db < server/sql/analytics_upgrade.sql`（列已存在时可忽略报错）
-7. `copy server\.env.example server\.env` 并填写 `DB_*`、`JWT_SECRET`、`APP_PUBLIC_URL`
-8. 根目录 `npm run dev`（或分别 `npm run dev:server` / `npm run dev:client`）
+7. 运营角色扩展：`mysql -u root -p movie_db < server/sql/rbac_upgrade.sql`（需先执行 `analytics_ops_upgrade.sql`）
+8. `copy server\.env.example server\.env` 并填写 `DB_*`、`JWT_SECRET`、`APP_PUBLIC_URL`
+9. 根目录 `npm run dev`（或分别 `npm run dev:server` / `npm run dev:client`）
 
 端口默认：API `1337`，前端 `5173`（Vite 代理 `/api` -> 1337）。
 

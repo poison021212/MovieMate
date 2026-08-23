@@ -82,13 +82,15 @@ export default function PlatformCharts() {
   return (
     <div>
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={12} sm={8}>
+        <Col xs={12} sm={overview?.userCount != null ? 8 : 12}>
           <Card><Statistic title="片库总量" value={overview?.movieCount ?? '—'} /></Card>
         </Col>
-        <Col xs={12} sm={8}>
-          <Card><Statistic title="注册用户" value={overview?.userCount ?? '—'} /></Card>
-        </Col>
-        <Col xs={12} sm={8}>
+        {overview?.userCount != null && (
+          <Col xs={12} sm={8}>
+            <Card><Statistic title="注册用户" value={overview.userCount} /></Card>
+          </Col>
+        )}
+        <Col xs={12} sm={overview?.userCount != null ? 8 : 12}>
           <Card><Statistic title="影评总数" value={overview?.reviewCount ?? '—'} /></Card>
         </Col>
       </Row>

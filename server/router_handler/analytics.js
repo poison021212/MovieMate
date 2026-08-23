@@ -1,3 +1,5 @@
+const db = require('../db/index.js')
+const { isStaff } = require('../utils/roles.js')
 const {
   getGenreDistribution,
   getYearTrends,
@@ -10,9 +12,21 @@ const {
   getMeAiUsage,
 } = require('../utils/analyticsCore.js')
 
+async function resolveStaffRole(req) {
+  if (!req.user?.username) return null
+  const [rows] = await db.query('SELECT role FROM users WHERE username = ? LIMIT 1', [
+    req.user.username,
+  ])
+  return rows[0]?.role || null
+}
+
 exports.getOverview = async (req, res) => {
   try {
     const data = await getPlatformOverview()
+    const role = await resolveStaffRole(req)
+    if (!isStaff(role)) {
+      delete data.userCount
+    }
     res.success({ message: '平台概览', data }, 200)
   } catch (err) {
     console.error('analytics overview', err)

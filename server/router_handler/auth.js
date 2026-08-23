@@ -57,6 +57,7 @@ function publicUser(row) {
     email: row.email,
     emailVerified: Boolean(row.email_verified),
     status: row.status || 'active',
+    role: row.role || 'user',
   }
 }
 

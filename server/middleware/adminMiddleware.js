@@ -1,4 +1,5 @@
 const db = require('../db/index.js')
+const { isStaff, permissionsFor } = require('../utils/roles.js')
 
 module.exports = async function adminMiddleware(req, res, next) {
   const username = req.user?.username
@@ -9,8 +10,12 @@ module.exports = async function adminMiddleware(req, res, next) {
     ])
     const user = rows[0]
     if (!user || user.status !== 'active') return res.cc('账号不可用', 403)
-    if (user.role !== 'admin') return res.cc('需要管理员权限', 403)
-    req.adminUser = { username, role: user.role }
+    if (!isStaff(user.role)) return res.cc('需要运营权限', 403)
+    req.adminUser = {
+      username,
+      role: user.role,
+      permissions: permissionsFor(user.role),
+    }
     next()
   } catch (err) {
     console.error('adminMiddleware', err)

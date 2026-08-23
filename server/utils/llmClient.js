@@ -7,6 +7,7 @@ function resolveApiKey() {
     process.env.LLM_API_KEY ||
     process.env.DEEPSEEK_API_KEY ||
     process.env.DASHSCOPE_API_KEY ||
+    process.env.GEMINI_API_KEY ||
     ''
   ).trim()
 }

@@ -108,7 +108,20 @@ git checkout clean-structure
 | AI 推荐无回复 / 降级 | `ollama list` 是否含 `LLM_MODEL` 同名模型；`:cloud` 模型是否已 `ollama signin`；改 `.env` 后是否重启后端；查看助手正文或 toast 中的 LLM 错误详情 |
 | 速览/收藏异常 | 确认已登录且 JWT 未过期 |
 
-## 9. 生产构建
+## 9. 运行集成测试
+
+后端集成测试（`server/tests/`，Vitest + supertest）会**自动创建独立的 `movie_db_test` 测试库**（用 `server/.env` 的 MySQL 账号建库建表），不会污染 `movie_db` 开发数据。
+
+前置：本机 MySQL 运行中，且 `server/.env` 的登录账号有建库权限。
+
+```bash
+cd server
+npm test          # 等价 npx vitest run
+```
+
+覆盖：注册/邮箱验证/登录双 token、refresh 仅 HttpOnly Cookie、封禁账号 403、收藏增删与联表、评论按 movieId/username 筛选、pageSize 上限。
+
+## 10. 生产构建
 
 ```bash
 npm run build -w moviemate-client
@@ -116,7 +129,7 @@ npm run build -w moviemate-client
 
 产物：`client/dist`，需自行配置静态托管与 API 地址。
 
-## 10. 实现位置
+## 11. 实现位置
 
 - 入口：[`server/server.js`](../../server/server.js)、[`client/src/main.jsx`](../../client/src/main.jsx)
 - 数据库池：[`server/db/index.js`](../../server/db/index.js)

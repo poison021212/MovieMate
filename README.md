@@ -128,6 +128,8 @@ npm run dev:client
 
 ## 常见问题
 
+> 自动化集成测试：`cd server && npm test`（自动建独立 `movie_db_test` 库，不污染开发数据）。详见 [runtime-and-config.md](docs/features/runtime-and-config.md)。
+
 | 现象 | 处理 |
 |------|------|
 | `Cannot find module 'dotenv'` | 在根目录重新 `npm install` |

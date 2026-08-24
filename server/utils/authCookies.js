@@ -32,7 +32,8 @@ function clearRefreshCookie(res) {
 }
 
 function getRefreshTokenFromRequest(req) {
-  return req.cookies?.[REFRESH_COOKIE] || req.body?.refreshToken || null
+  // 只认 HttpOnly Cookie：明文 body 通道会削弱 HttpOnly 的防 XSS 意义
+  return req.cookies?.[REFRESH_COOKIE] || null
 }
 
 function sendAuthJson(res, tokens) {

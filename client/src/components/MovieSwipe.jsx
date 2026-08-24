@@ -6,10 +6,11 @@ import { useGetMoviesQuery } from '@/store/API/MovieApi'
 import { HeartOutlined, HeartFilled, MessageOutlined, SoundOutlined, PauseOutlined } from '@ant-design/icons'
 import { useSelector } from 'react-redux'
 import { Modal, Input, Button, List, Avatar, Typography, Spin } from 'antd'
-import { useAddFavoriteMutation, useDelFavoriteMutation, useGetFavoriteQuery } from '@/store/API/favoriteApi'
+import { useAddFavoriteMutation, useDelFavoriteMutation } from '@/store/API/favoriteApi'
 import { useGetReviewQuery, useAddReviewMutation } from '@/store/API/reviewApi'
 import { speakText, stopSpeaking, isSpeechSupported } from '@/utils/speakText'
 import { confirmDanger } from '@/utils/confirmDialog'
+import { useFavorites } from '@/hooks/useFavorites'
 
 const { Text, Paragraph } = Typography
 const SWIPE_PAGE_SIZE = 10
@@ -42,11 +43,15 @@ const MovieSwipe = () => {
 
   const auth = useSelector((state) => state.auth)
 
-  const { data: favorites } = useGetFavoriteQuery(undefined, { skip: !auth.isLogin })
+  const { favorites } = useFavorites()
   const [addFavorite] = useAddFavoriteMutation()
   const [delFavorite] = useDelFavoriteMutation()
 
-  const { data: reviews, refetch } = useGetReviewQuery()
+  // 评论按当前打开的电影筛选，由服务端过滤关键字
+  const { data: reviews } = useGetReviewQuery(
+    { movieId: currentMovie?.documentId },
+    { skip: !currentMovie }
+  )
   const [addReview] = useAddReviewMutation()
 
   useEffect(() => {
@@ -129,35 +134,11 @@ const MovieSwipe = () => {
     return <div style={{ padding: 50, textAlign: 'center' }}>暂无电影数据</div>
   }
 
-  const isFavorited = (movieId) => {
-    const movieIdNum = Number(movieId)
-    if (Array.isArray(favorites)) {
-      return favorites.some(
-        (fav) => Number(fav.movieId) === movieIdNum && fav.username === auth.userInfo?.username
-      )
-    }
-    if (favorites && Array.isArray(favorites.data)) {
-      return favorites.data.some(
-        (fav) => Number(fav.movieId) === movieIdNum && fav.username === auth.userInfo?.username
-      )
-    }
-    return false
-  }
+  const isFavorited = (movieId) =>
+    favorites.some((fav) => Number(fav.movieId) === Number(movieId))
 
-  const getFavoriteItem = (movieId) => {
-    const movieIdNum = Number(movieId)
-    if (Array.isArray(favorites)) {
-      return favorites.find(
-        (fav) => Number(fav.movieId) === movieIdNum && fav.username === auth.userInfo?.username
-      )
-    }
-    if (favorites && Array.isArray(favorites.data)) {
-      return favorites.data.find(
-        (fav) => Number(fav.movieId) === movieIdNum && fav.username === auth.userInfo?.username
-      )
-    }
-    return null
-  }
+  const getFavoriteItem = (movieId) =>
+    favorites.find((fav) => Number(fav.movieId) === Number(movieId)) || null
 
   const handleFavorite = async (movie) => {
     if (!auth.isLogin) {
@@ -175,7 +156,6 @@ const MovieSwipe = () => {
       } else {
         await addFavorite({
           movieId: Number(movie.documentId),
-          username: auth.userInfo?.username,
         })
       }
     } catch (error) {
@@ -202,31 +182,18 @@ const MovieSwipe = () => {
     }
     try {
       await addReview({
-        data: {
-          movieId: Number(currentMovie.documentId),
-          content: commentContent,
-          rating: 5,
-          date: new Date().toISOString(),
-        },
+        movieId: Number(currentMovie.documentId),
+        content: commentContent,
+        rating: 5,
       })
       setCommentContent('')
-      refetch()
     } catch (error) {
       console.error('添加评论失败:', error)
       alert('添加评论失败，请重试')
     }
   }
 
-  const getMovieReviews = (movieId) => {
-    const movieIdNum = Number(movieId)
-    if (Array.isArray(reviews)) {
-      return reviews.filter((review) => Number(review.movieId) === movieIdNum)
-    }
-    if (reviews && Array.isArray(reviews.data)) {
-      return reviews.data.filter((review) => Number(review.movieId) === movieIdNum)
-    }
-    return []
-  }
+  const getMovieReviews = () => (reviews?.data || [])
 
   const handleToggleSpeak = async (movie) => {
     if (!isSpeechSupported()) {
@@ -340,7 +307,7 @@ const MovieSwipe = () => {
       >
         <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '20px' }}>
           <List
-            dataSource={getMovieReviews(currentMovie?.documentId)}
+            dataSource={getMovieReviews()}
             renderItem={(review) => (
               <List.Item>
                 <List.Item.Meta

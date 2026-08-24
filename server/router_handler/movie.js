@@ -130,7 +130,7 @@ async function persistTmdbMovies(tmdbMovies) {
 
 function buildQueryContext(query) {
   const page = Math.max(parseInt(query.page, 10) || 1, 1)
-  const pageSize = Math.max(parseInt(query.pageSize, 10) || 12, 1)
+  const pageSize = Math.min(Math.max(parseInt(query.pageSize, 10) || 12, 1), 100)
   const q = (query.q || '').trim()
   const sortBy = (query.sortBy || 'id').trim()
   const sortOrder = (query.sortOrder || 'asc').toLowerCase()

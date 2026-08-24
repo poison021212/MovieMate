@@ -1,32 +1,35 @@
 import React from 'react'
 import { Layout as AntLayout, Menu, Dropdown, Space, Modal } from 'antd';
 import { HomeOutlined, HeartOutlined, UserOutlined, LogoutOutlined, MessageOutlined, DownOutlined, OpenAIOutlined, SwapOutlined, BarChartOutlined, SettingOutlined } from '@ant-design/icons';
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux';
-import { useLocation } from 'react-router-dom';
 import { logout } from '@/store/Slice/authSlice';
 import { useLogoutMutation } from '@/store/API/authApi';
 import { isStaff } from '@/utils/roles';
 
 const { Header, Content } = AntLayout;
 
+// path 前缀 → 高亮菜单项；更具体的前缀需排在前面(否则 /profile-review 会被 /profile 抢先命中)
+const SELECTED_BY_PREFIX = [
+  ['/profile-review', 'profile-review'],
+  ['/profile', 'profile'],
+  ['/ai-recommend', 'ai-recommend'],
+  ['/dashboard', 'dashboard'],
+  ['/admin', 'admin'],
+  ['/swipe', 'swipe'],
+  ['/auth', 'auth'],
+  ['/', 'home'],
+]
+
 const Layout = (props) => {
   const auth = useSelector(state => state.auth)
   const dispatch = useDispatch()
   const location = useLocation()
   const [logoutApi] = useLogoutMutation()
-  const getSelectedKey = () => {
-    const path = location.pathname
-    if (path === '/') return 'home'
-    if (path === '/profile') return 'profile'
-    if (path === '/profile-review') return 'profile-review'
-    if (path === '/auth') return 'auth'
-    if (path === '/movie/:id') return 'movie/:id'
-    if (path === '/ai-recommend') return 'ai-recommend'
-    if (path === '/dashboard') return 'dashboard'
-    if (path === '/admin') return 'admin'
-  }
-  const items = [{
+
+  const selectedKey = SELECTED_BY_PREFIX.find(([prefix]) => location.pathname.startsWith(prefix))?.[1]
+
+  const profileDropdownItems = [{
     key: 'profile',
     icon: <HeartOutlined />,
     label: <Link to="/profile">我的收藏</Link>,
@@ -68,55 +71,52 @@ const Layout = (props) => {
     })
   }
 
+  const navItems = [
+    { key: 'home', icon: <HomeOutlined />, label: <Link to="/">首页</Link> },
+    { key: 'swipe', icon: <SwapOutlined />, label: <Link to="/swipe">速览模式</Link> },
+    { key: 'ai-recommend', icon: <OpenAIOutlined />, label: <Link to="/ai-recommend">AI推荐</Link> },
+    { key: 'dashboard', icon: <BarChartOutlined />, label: <Link to="/dashboard">数据洞察</Link> },
+    ...(auth.isLogin && isStaff(auth.userInfo?.role)
+      ? [{ key: 'admin', icon: <SettingOutlined />, label: <Link to="/admin">运营台</Link> }]
+      : []),
+    ...(!auth.isLogin
+      ? [{
+          key: 'auth',
+          icon: <UserOutlined />,
+          style: { marginLeft: 'auto' },
+          label: <Link to="/auth" state={{ from: location }}>登录/注册</Link>,
+        }]
+      : [
+          {
+            key: 'profile',
+            label: (
+              <Dropdown menu={{ items: profileDropdownItems }} trigger={['click']}>
+                <span style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                  <Space>
+                    我的
+                    <DownOutlined />
+                  </Space>
+                </span>
+              </Dropdown>
+            ),
+          },
+          {
+            key: 'auth',
+            icon: <UserOutlined />,
+            style: { marginLeft: 'auto' },
+            label: <Link to="/profile">{auth.userInfo?.username || '个人中心'}</Link>,
+          },
+          { key: 'logout', icon: <LogoutOutlined />, onClick: logoutConfirm, label: '退出' },
+        ]),
+  ]
+
   return (
     <AntLayout>
       {/* flexWrap: 'wrap', gap: 8允许换行；minWidth: 0 防止溢出 */}
       {/*  fontSize: 'clamp(14px, 3vw, 20px)'响应式字体*/}
       <Header style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000, }}>
         <div style={{ color: 'white', fontSize: 20, marginRight: 40, whiteSpace: 'nowrap' }}>光影笔记</div>
-        <Menu theme="dark" mode="horizontal" defaultSelectedKeys={[getSelectedKey()]} style={{ flex: 1, minWidth: 0 }}>
-          <Menu.Item key="home" icon={<HomeOutlined />}>
-            <Link to="/">首页</Link>
-          </Menu.Item>
-          <Menu.Item key="swipe" icon={<SwapOutlined />}>
-            <Link to="/swipe">速览模式</Link>
-          </Menu.Item>
-          <Menu.Item key="ai-recommend" icon={<OpenAIOutlined />}>
-            <Link to="/ai-recommend">AI推荐</Link>
-          </Menu.Item>
-          <Menu.Item key="dashboard" icon={<BarChartOutlined />}>
-            <Link to="/dashboard">数据洞察</Link>
-          </Menu.Item>
-          {auth.isLogin && isStaff(auth.userInfo?.role) && (
-            <Menu.Item key="admin" icon={<SettingOutlined />}>
-              <Link to="/admin">运营台</Link>
-            </Menu.Item>
-          )}
-          {!auth.isLogin && (
-            <Menu.Item key="auth" icon={<UserOutlined />} style={{ marginLeft: 'auto' }}>
-              <Link to="/auth" state={{ from: location }}>登录/注册</Link>
-            </Menu.Item>
-          )}
-          {auth.isLogin &&
-            <>
-              <Menu.Item key="profile" >
-                <Dropdown menu={{ items }} trigger={['click']}>
-                  <span style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                    <Space>
-                      我的
-                      <DownOutlined />
-                    </Space>
-                  </span>
-                </Dropdown>
-              </Menu.Item>
-              <Menu.Item key="auth" icon={<UserOutlined />} style={{ marginLeft: 'auto' }}>
-                <Link to="/profile">{auth.userInfo?.username || '个人中心'}</Link>
-              </Menu.Item>
-              <Menu.Item key="logout" icon={<LogoutOutlined />} onClick={logoutConfirm}>
-                退出
-              </Menu.Item>
-            </>}
-        </Menu>
+        <Menu theme="dark" mode="horizontal" selectedKeys={selectedKey ? [selectedKey] : []} items={navItems} style={{ flex: 1, minWidth: 0 }} />
       </Header>
       <Content style={{ minHeight: '100vh', paddingTop: 55 }}>
         {props.children}

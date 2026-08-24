@@ -6,7 +6,8 @@ import { useState, useEffect } from 'react';
 import { useGetMoviesByIdQuery } from '@/store/API/MovieApi';
 import { useSelector } from 'react-redux';
 import ReviewsForm from './ReviewsForm';
-import { useGetFavoriteQuery, useAddFavoriteMutation, useDelFavoriteMutation } from '@/store/API/favoriteApi';
+import { useAddFavoriteMutation, useDelFavoriteMutation } from '@/store/API/favoriteApi';
+import { useFavorites } from '@/hooks/useFavorites';
 
 const { Text } = Typography;
 
@@ -14,7 +15,7 @@ function MovieDetail() {
   const { id } = useParams(); // 获取 URL 中的 id 参数
   const auth = useSelector(state => state.auth)
   const { data: movie, isLoading, isError } = useGetMoviesByIdQuery(id); // 传递 id 参数
-  const { data: favorite } = useGetFavoriteQuery()
+  const { favorites } = useFavorites()
   const [delFavorite] = useDelFavoriteMutation()
   const [addFavorite] = useAddFavoriteMutation()
   const [showFullCast, setShowFullCast] = useState(false);
@@ -37,17 +38,12 @@ function MovieDetail() {
     return <div style={{ padding: 50, textAlign: 'center' }}>电影不存在</div>;
   }
 
-  // 从后台收藏数据中判断当前电影是否已收藏，只考虑当前用户的收藏
-  const favoriteArray = Array.isArray(favorite?.data) ? favorite.data.filter(item => item.username === auth.userInfo?.username) : [];
-  //  因为id是从params中获取的,字符串类型，而item.movieId是从后端获取的数字类型，所以需要转换为数字，使得比较结果为true
+  // 收藏列表已由后端按当前用户过滤；id 为字符串需转数字比较
   const movieIdNum = Number(id);
-  const favoriteItem = favoriteArray.find(item => item.movieId === movieIdNum);
-  //  const isFavorite = !!favoriteItem;表示如果favoriteItem存在，则isFavorite为true，否则为false
+  const favoriteItem = favorites.find(item => Number(item.movieId) === movieIdNum);
   const isFavorite = !!favoriteItem;
-  console.log('1111', isFavorite, favorite, auth.userInfo)
 
   const handleToggleFavorite = async () => {
-    console.log('点击收藏，当前auth:', auth)
     if (!auth.isLogin) {
       message.error('请先登录后再收藏')
       navigate('/auth', { state: { from: location } });
@@ -65,8 +61,8 @@ function MovieDetail() {
           message.success('已取消收藏');
         }
       } else {
-        // 添加收藏，传递电影 ID 和用户名
-        await addFavorite({ movieId: Number(id), username: auth.userInfo?.username }).unwrap();
+        // 添加收藏（username 由后端从登录态取值）
+        await addFavorite({ movieId: Number(id) }).unwrap();
       }
     } catch (error) {
       if (error?.message === 'cancelled') return

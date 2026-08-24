@@ -11,10 +11,10 @@ const favoriteApi = createApi({
       providesTags: ['Favorite'],
     }),
     addFavorite: builder.mutation({
-      query: ({ movieId, username }) => ({
+      query: ({ movieId }) => ({
         url: 'favorites',
         method: 'POST',
-        body: { data: { movieId, username } },
+        body: { movieId },
       }),
       invalidatesTags: ['Favorite'],
     }),

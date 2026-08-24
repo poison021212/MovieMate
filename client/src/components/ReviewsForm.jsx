@@ -138,7 +138,7 @@ function ReviewThreadItem({ item, auth, navigate, location, onDeleteReview }) {
 
 const ReviewsForm = () => {
   const { id } = useParams()
-  const { data: reviews, isLoading, isError, refetch } = useGetReviewQuery()
+  const { data: reviews, isLoading, isError } = useGetReviewQuery({ movieId: Number(id) })
   const [addReview] = useAddReviewMutation()
   const [delReview] = useDelReviewMutation()
   const [form] = Form.useForm();
@@ -155,9 +155,8 @@ const ReviewsForm = () => {
     return <div style={{ padding: 24 }}>加载评论失败</div>
   }
 
-  const reviewArray = reviews?.data || [];
-  const movieIdNum = Number(id);
-  const filteredReviews = reviewArray.filter(review => review.movieId === movieIdNum);
+  // 服务端已按 movieId 筛选,无需前端全量再过滤
+  const filteredReviews = reviews?.data || [];
 
   const submitReview = async (values) => {
     if (!auth.isLogin) {
@@ -168,18 +167,13 @@ const ReviewsForm = () => {
 
     setSubmitting(true);
     try {
-      const reviewData = {
-        data: {
-          movieId: Number(id),
-          date: values.date,
-          rating: values.rating,
-          content: values.content
-        }
-      };
-      await addReview(reviewData).unwrap();
+      await addReview({
+        movieId: Number(id),
+        rating: values.rating,
+        content: values.content,
+      }).unwrap();
       message.success('影评提交成功');
       form.resetFields();
-      refetch();
     } catch (error) {
       console.error('提交影评失败:', error);
       message.error('影评提交失败');
@@ -206,7 +200,6 @@ const ReviewsForm = () => {
         try {
           await delReview(reviewId).unwrap();
           message.success('评论删除成功');
-          refetch();
         } catch {
           message.error('删除评论失败');
         }

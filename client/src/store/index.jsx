@@ -1,10 +1,8 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { setupListeners } from '@reduxjs/toolkit/query'
 import MovieApi from '@/store/API/MovieApi'
-import { favoriteSlice } from '@/store/Slice/favoriteSlice'
 import { authSlice } from '@/store/Slice/authSlice'
 import authApi from '@/store/API/authApi'
-import { reviewSlice } from '@/store/Slice/reviewSlice'
 import reviewApi from '@/store/API/reviewApi'
 import favoriteApi from '@/store/API/favoriteApi'
 import vercelApi from '@/store/API/vercelApi'
@@ -20,9 +18,7 @@ const store = configureStore({
     [vercelApi.reducerPath]: vercelApi.reducer,
     [analyticsApi.reducerPath]: analyticsApi.reducer,
     [adminApi.reducerPath]: adminApi.reducer,
-    favorite: favoriteSlice.reducer,
     auth: authSlice.reducer,
-    review: reviewSlice.reducer,
   },
   middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(MovieApi.middleware, authApi.middleware, reviewApi.middleware, favoriteApi.middleware, vercelApi.middleware, analyticsApi.middleware, adminApi.middleware),
 

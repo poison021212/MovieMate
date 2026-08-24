@@ -11,9 +11,12 @@
 | [review-flow.md](features/review-flow.md) | 影评发布、列表、删除 |
 | [swipe-mode.md](features/swipe-mode.md) | 速览模式（上下滑 + 分页预加载） |
 | [ai-recommendation.md](features/ai-recommendation.md) | AI 电影推荐（Tool-calling Agent） |
+| [ai-recommendation-gap.md](features/ai-recommendation-gap.md) | AI 推荐诊断：对比主流 LLM 产品的缺陷与改进路线（评审） |
 | [analytics-dashboard.md](features/analytics-dashboard.md) | 数据洞察仪表盘（日快照 + AI 预测；`userCount` 仅 staff 可见） |
 | [ops-console.md](features/ops-console.md) | 运营控制台（预设角色、角色管理、封禁/审评论/审计） |
 | [tmdb-sync.md](features/tmdb-sync.md) | TMDB 数据同步脚本 |
+| [douban-seed.md](features/douban-seed.md) | 豆瓣离线种子导入（TMDB 不可达时的本地兜底） |
+| [change-summary-2026-08-24.md](features/change-summary-2026-08-24.md) | 2026-08-24 改造汇总：安全修复、评论/收藏契约、集成测试 |
 | [runtime-and-config.md](features/runtime-and-config.md) | 环境、启动、数据库与故障排查 |
 | [auth-security.md](features/auth-security.md) | 登录注册、会话与密码找回（`user.role` 随登录/me 返回） |
 | [preview-change-summary-2026-08-04.md](features/preview-change-summary-2026-08-04.md) | 本轮改动汇总与 Preview 指南 |

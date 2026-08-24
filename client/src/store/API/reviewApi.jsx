@@ -18,10 +18,11 @@ const reviewApi = createApi({
         invalidatesTags: ['Review'],
       }),
       getReview: builder.query({
-        query() {
+        query(params) {
           return {
             url: 'reviews',
             method: 'GET',
+            params, // 支持 ?movieId=&username= 服务端筛选
           }
         },
         providesTags: ['Review'],

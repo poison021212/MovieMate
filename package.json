@@ -15,10 +15,5 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
-  },
-  "dependencies": {
-    "@google/genai": "^2.18.0",
-    "node-fetch": "^3.3.2",
-    "undici": "^8.10.0"
   }
 }

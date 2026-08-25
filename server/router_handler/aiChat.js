@@ -1,6 +1,11 @@
-const { chat_schema, create_session_schema } = require('../schema/ai.js')
+const { chat_schema, create_session_schema, feedback_schema } = require('../schema/ai.js')
 const sessionStore = require('../utils/aiSessionStore.js')
 const { buildTasteProfile } = require('../utils/recommendCore.js')
+const {
+  getRecentFeedback,
+  buildFeedbackHint,
+  recordFeedback,
+} = require('../utils/aiRecommendFeedback.js')
 const {
   runAgentChatTurn,
   runAgentChatTurnCore,
@@ -141,6 +146,8 @@ exports.postRecommendChat = async (req, res) => {
     )
     const history = await sessionStore.listMessages(sessionId)
     const tasteProfile = await buildTasteProfile(username)
+    const recentFeedback = await getRecentFeedback(username)
+    const feedbackHint = buildFeedbackHint(recentFeedback)
 
     const result = await runAgentChatTurn({
       message,
@@ -148,6 +155,7 @@ exports.postRecommendChat = async (req, res) => {
       historyMessages: history,
       username,
       sessionSummary: sessionRecord?.summary,
+      feedbackHint,
     })
 
     const finalized = await finalizeChatTurn({
@@ -202,6 +210,8 @@ exports.postRecommendChatStream = async (req, res) => {
 
     const history = await sessionStore.listMessages(sessionId)
     const tasteProfile = await buildTasteProfile(username)
+    const recentFeedback = await getRecentFeedback(username)
+    const feedbackHint = buildFeedbackHint(recentFeedback)
 
     const result = await runAgentChatTurnCore({
       message,
@@ -209,6 +219,7 @@ exports.postRecommendChatStream = async (req, res) => {
       historyMessages: history,
       username,
       sessionSummary: sessionRecord?.summary,
+      feedbackHint,
       onEvent: (ev) => {
         if (ev.type === 'plan') sendEvent('plan', { steps: ev.steps })
         if (ev.type === 'trace') sendEvent('trace', { entry: ev.entry })
@@ -241,3 +252,26 @@ exports.postRecommendChatStream = async (req, res) => {
 }
 
 exports.getUsernameFromRequest = getUsernameFromRequest
+
+exports.postRecommendFeedback = async (req, res) => {
+  const { error } = feedback_schema.validate(req.body || {})
+  if (error) return res.cc(error.details[0].message, 400)
+
+  const username = req.user.username
+  const { sessionId, movieTitle, localMovieId, tmdbId, action } = req.body
+
+  try {
+    await recordFeedback({
+      username,
+      sessionId: sessionId ? Number(sessionId) : null,
+      movieTitle,
+      localMovieId: localMovieId ? Number(localMovieId) : null,
+      tmdbId: tmdbId ? Number(tmdbId) : null,
+      action,
+    })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('recommend/feedback', err)
+    res.status(500).json({ error: { message: '记录反馈失败' } })
+  }
+}

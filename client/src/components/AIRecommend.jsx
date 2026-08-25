@@ -25,6 +25,7 @@ import {
   useCreateAiSessionMutation,
   useDeleteAiSessionMutation,
   useGetAiSessionMessagesQuery,
+  useSubmitRecommendFeedbackMutation,
 } from '@/store/API/vercelApi';
 import vercelApi from '@/store/API/vercelApi';
 import { streamRecommendChat } from '@/utils/streamRecommendChat';
@@ -43,7 +44,7 @@ function posterUrl(movie) {
   return '/no-image.png';
 }
 
-function MovieCard({ movie, onDetail }) {
+function MovieCard({ movie, onDetail, showFeedback, onFeedback, feedbackDisabled }) {
   return (
     <Card size="small" style={{ marginBottom: 12 }} bodyStyle={{ padding: 12 }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -73,6 +74,24 @@ function MovieCard({ movie, onDetail }) {
             <Tag color="green" style={{ marginTop: 8 }}>
               站内 {movie.local_movie_id}
             </Tag>
+          )}
+          {showFeedback && (
+            <Space size="small" style={{ marginTop: 8 }}>
+              <Button
+                size="small"
+                disabled={feedbackDisabled}
+                onClick={() => onFeedback?.(movie, 'like')}
+              >
+                👍
+              </Button>
+              <Button
+                size="small"
+                disabled={feedbackDisabled}
+                onClick={() => onFeedback?.(movie, 'dislike')}
+              >
+                👎
+              </Button>
+            </Space>
           )}
         </div>
       </div>
@@ -111,6 +130,7 @@ const AIRecommend = () => {
 
   const [createSession] = useCreateAiSessionMutation();
   const [deleteSession] = useDeleteAiSessionMutation();
+  const [submitFeedback, { isLoading: feedbackSubmitting }] = useSubmitRecommendFeedbackMutation();
 
   const profileMovies = profileData?.movies || [];
   const tasteProfile = profileData?.tasteProfile;
@@ -197,16 +217,58 @@ const AIRecommend = () => {
     });
   };
 
-  const handleSendChat = async () => {
+  const handleMovieFeedback = async (movie, action) => {
+    if (!auth.isLogin) {
+      message.warning('请先登录');
+      return;
+    }
+    try {
+      await submitFeedback({
+        sessionId: activeSessionId || undefined,
+        movieTitle: movie.title,
+        localMovieId: movie.local_movie_id || undefined,
+        tmdbId: movie.tmdb_id || undefined,
+        action,
+      }).unwrap();
+      message.success(action === 'like' ? '已记录喜欢' : '已记录不喜欢，下轮推荐会参考');
+    } catch (err) {
+      message.error(err?.data?.error?.message || '反馈失败');
+    }
+  };
+
+  const handleRefreshBatch = async () => {
+    if (!auth.isLogin) {
+      message.warning('请先登录');
+      return;
+    }
+    if (!chatMovies.length) {
+      message.info('请先通过对话获得推荐片单');
+      return;
+    }
+    try {
+      await submitFeedback({
+        sessionId: activeSessionId || undefined,
+        movieTitle: chatMovies.map((m) => m.title).join('、').slice(0, 250),
+        action: 'refresh_batch',
+      }).unwrap();
+    } catch {
+      /* still try to refresh recommendations */
+    }
+    await handleSendChat('换一批，推荐一些不同的电影，请避开刚才推荐过的片');
+  };
+
+  const handleSendChat = async (overrideMessage) => {
     if (!auth.isLogin) {
       message.warning('请先登录后使用 AI 对话');
       goToAuth();
       return;
     }
-    const text = chatInput.trim();
+    const text = (typeof overrideMessage === 'string' ? overrideMessage : chatInput).trim();
     if (!text) return;
     const draft = text;
-    setChatInput('');
+    if (typeof overrideMessage !== 'string') {
+      setChatInput('');
+    }
     setPendingUserMessage(draft);
     setStreamingText('');
     setLastPlan([]);
@@ -309,6 +371,16 @@ const AIRecommend = () => {
                 当前展示：对话最新推荐
               </Tag>
             )}
+            {chatMovies.length > 0 && auth.isLogin && (
+              <Button
+                size="small"
+                style={{ marginBottom: 12 }}
+                loading={chatLoading}
+                onClick={handleRefreshBatch}
+              >
+                换一批
+              </Button>
+            )}
             {displayMovies.length === 0 ? (
               <Empty description="暂无推荐，请先同步片库或登录后积累收藏" />
             ) : (
@@ -317,6 +389,9 @@ const AIRecommend = () => {
                   key={`${movie.local_movie_id || movie.tmdb_id || movie.title}-${idx}`}
                   movie={movie}
                   onDetail={goDetail}
+                  showFeedback={auth.isLogin && chatMovies.length > 0}
+                  onFeedback={handleMovieFeedback}
+                  feedbackDisabled={feedbackSubmitting || chatLoading}
                 />
               ))
             )}

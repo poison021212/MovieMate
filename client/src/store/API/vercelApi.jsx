@@ -57,6 +57,13 @@ const vercelApi = createApi({
         'ProfileFeed',
       ],
     }),
+    submitRecommendFeedback: builder.mutation({
+      query: (body) => ({
+        url: 'recommend/feedback',
+        method: 'POST',
+        body,
+      }),
+    }),
   }),
 })
 
@@ -68,5 +75,6 @@ export const {
   useDeleteAiSessionMutation,
   useGetAiSessionMessagesQuery,
   useRecommendChatMutation,
+  useSubmitRecommendFeedbackMutation,
 } = vercelApi
 export default vercelApi

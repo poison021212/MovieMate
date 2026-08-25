@@ -78,6 +78,7 @@
 **编排**：计划外工具跳过；工具失败重试 1 次；TMDB 失败降级本地搜索（推荐模式）；整轮 LLM 失败时 recommend 走规则片单（**不拼接用户原话**），qa/chat 优先用已检索详情拼 grounded 回复。  
 **本轮优先**：系统提示要求 Agent 只服务当前用户消息，不因历史会话搜无关片名。  
 **记忆**：会话 ≥8 轮写入 `ai_recommend_sessions.summary`。  
+**反馈**：👍/👎/换一批写入 `ai_recommend_feedback`，下轮注入 system prompt（见 [ai-recommendation-feedback.md](./ai-recommendation-feedback.md)）。  
 **限流**：每用户每分钟 12 次。  
 **上下文预算**：按字符截断（默认 system 4k / 历史 6k / 每条工具 2k / 总计 16k，可用 `LLM_PROMPT_BUDGET_*` 覆盖）。超限时优先保留当前用户消息与最近工具结果，从最旧历史开始裁。实现：[`server/utils/promptBudget.js`](../../server/utils/promptBudget.js)。  
 **流式**：`plan` / `trace` 在工具阶段发出；最终回复由独立一轮无工具 LLM 流式生成后落库。写回复失败则回退 `finish_recommend` 草稿或 `buildDegradedReply`。

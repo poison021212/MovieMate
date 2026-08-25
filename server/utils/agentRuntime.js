@@ -186,7 +186,7 @@ function mapLocalMovieDetail(row) {
 const CURRENT_TURN_RULE =
   '重要：只服务【本轮用户消息】的需求；不要因为历史对话去搜无关片名，除非本轮仍在问该片。'
 
-function buildSystemPrompt(chatMode, sessionSummary) {
+function buildSystemPrompt(chatMode, sessionSummary, feedbackHint) {
   let prompt = ''
   if (chatMode === 'qa') {
     prompt =
@@ -209,6 +209,9 @@ function buildSystemPrompt(chatMode, sessionSummary) {
   }
   if (sessionSummary) {
     prompt += `\n\n【会话记忆摘要】${sessionSummary}`
+  }
+  if (feedbackHint) {
+    prompt += `\n\n【用户近期反馈】\n${feedbackHint}`
   }
   return prompt
 }
@@ -633,6 +636,7 @@ async function runAgentChatTurnCore({
   historyMessages,
   username,
   sessionSummary,
+  feedbackHint,
   onEvent,
 }) {
   const emit = (type, data) => {
@@ -653,7 +657,7 @@ async function runAgentChatTurnCore({
     sources: [],
   }
 
-  const systemPrompt = buildSystemPrompt(chatMode, sessionSummary)
+  const systemPrompt = buildSystemPrompt(chatMode, sessionSummary, feedbackHint)
 
   const convo = [{ role: 'system', content: systemPrompt }]
   ;(historyMessages || []).slice(-8).forEach((m) => {

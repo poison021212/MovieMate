@@ -1,11 +1,10 @@
-import React from 'react'
-import { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   useRegisterMutation,
   useLoginMutation,
   useResendVerificationMutation,
 } from '@/store/API/authApi'
-import { useDispatch } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import { loginSuccess } from '@/store/Slice/authSlice'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { LockOutlined, UserOutlined, MailOutlined } from '@ant-design/icons'
@@ -13,6 +12,7 @@ import { Button, Form, Input, Alert, message } from 'antd'
 
 const AuthForm = () => {
   const dispatch = useDispatch()
+  const auth = useSelector((state) => state.auth)
   const navigate = useNavigate()
   const location = useLocation()
   const fromLocation = location.state?.from
@@ -27,6 +27,12 @@ const AuthForm = () => {
   const [regFn, { error: registerError, reset: resetRegister }] = useRegisterMutation()
   const [loginFn, { error: loginError, reset: resetLogin }] = useLoginMutation()
   const [resendVerification, { isLoading: resendLoading }] = useResendVerificationMutation()
+
+  useEffect(() => {
+    if (auth.sessionStatus === 'ready' && auth.isLogin) {
+      navigate(redirectTo, { replace: true })
+    }
+  }, [auth.sessionStatus, auth.isLogin, navigate, redirectTo])
 
   const clearAuthAlerts = () => {
     setRegisterEmailHint('')

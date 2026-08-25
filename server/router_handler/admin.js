@@ -1,8 +1,38 @@
 const db = require('../db/index.js')
 const { hasPermission, isStaff, ALL_ROLES } = require('../utils/roles.js')
 
+let auditTableReady = false
+
+async function ensureAuditTable() {
+  if (auditTableReady) return true
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS admin_audit_log (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        admin_username VARCHAR(15) NOT NULL,
+        action VARCHAR(64) NOT NULL,
+        target_type VARCHAR(32) NULL,
+        target_id VARCHAR(64) NULL,
+        detail JSON NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_audit_admin (admin_username, created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `)
+    auditTableReady = true
+    return true
+  } catch (err) {
+    console.error('ensureAuditTable failed:', err.message)
+    return false
+  }
+}
+
 async function writeAudit(adminUsername, action, targetType, targetId, detail) {
   try {
+    const ready = await ensureAuditTable()
+    if (!ready) {
+      console.error('writeAudit skipped: admin_audit_log unavailable')
+      return
+    }
     await db.query(
       `INSERT INTO admin_audit_log (admin_username, action, target_type, target_id, detail)
        VALUES (?, ?, ?, ?, ?)`,
@@ -15,7 +45,7 @@ async function writeAudit(adminUsername, action, targetType, targetId, detail) {
       ]
     )
   } catch (err) {
-    console.error('writeAudit', err)
+    console.error('writeAudit failed:', err.message)
   }
 }
 
@@ -153,6 +183,10 @@ exports.listAuditLog = async (req, res) => {
     return res.cc('无权限', 403)
   }
   try {
+    const ready = await ensureAuditTable()
+    if (!ready) {
+      return res.status(500).json({ error: { message: '审计表不可用，请检查数据库权限或执行 server/sql/analytics_ops_upgrade.sql' } })
+    }
     const [rows] = await db.query(
       `SELECT id, admin_username, action, target_type, target_id, detail, created_at
        FROM admin_audit_log ORDER BY id DESC LIMIT 100`

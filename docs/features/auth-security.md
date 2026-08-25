@@ -1,7 +1,7 @@
 # 认证与安全
 
 - 状态：已实现（Phase 1 + Phase 2 基础；Phase 3 评估）
-- 最后核对日期：2026-08-23
+- 最后核对日期：2026-08-25
 
 ## 1. 目标
 
@@ -12,6 +12,13 @@
 - `refreshToken`：**HttpOnly Cookie**（`path=/api/auth`），JS 不可读
 - `accessToken` / `userInfo`：**仅 Redux 内存**，刷新页面靠 Cookie 静默 `POST /auth/refresh` 续期
 - **禁止**将用户资料、收藏、评论写入 `localStorage`
+
+**受保护路由与会话恢复：**
+
+- `auth.sessionStatus`：`bootstrapping`（首屏 Cookie 静默 refresh 中）→ `ready`（续期结束或失败）。
+- [`NeedAuth`](../../client/src/components/NeedAuth.jsx) 在 `bootstrapping` 时显示加载，**不**立即跳转登录页；避免 F5 刷新 `/admin`、`/profile` 时误跳 `/auth`。
+- 退出或切换账号（user id 变化）时，清空 `adminApi` / `favoriteApi` / `reviewApi` 等用户域 RTK Query 缓存，避免运营台仍展示上一账号数据。
+- 已登录用户访问 `/auth` 时自动跳回原页面或首页。
 
 ## 2. 用户流程
 
@@ -92,7 +99,8 @@
 ## 8. 验收标准
 
 - [ ] 登录后 DevTools → Local Storage 无 `userInfo` / `refreshToken` / `favorites` / `reviews`
-- [ ] 刷新页面仍保持登录（Cookie 静默 refresh）
+- [ ] 刷新页面仍保持登录（Cookie 静默 refresh）；受保护路由 F5 不闪登录页
+- [ ] 换账号后运营台/收藏/评论数据随新用户刷新
 - [ ] 退出后需重新登录
 - [ ] 未验证邮箱无法登录（403）
 - [ ] 连续登录失败触发限流（429）

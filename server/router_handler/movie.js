@@ -3,33 +3,9 @@ const {
   recordHybridSearchEvent,
   getHybridSearchMetricsSnapshot,
 } = require('../utils/hybridSearchMetrics.js')
+const { hasTmdbToken, searchTmdbMovies } = require('../utils/tmdbClient.js')
 
-const TMDB_TOKEN = process.env.TMDB_ACCESS_TOKEN
-const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
 const HYBRID_MIN_LOCAL_RESULTS = 5
-const TMDB_FALLBACK_MAX_FETCH = 20
-
-async function searchTmdbMovies(query) {
-  if (!TMDB_TOKEN || !query) return []
-
-  const endpoint = `/search/movie?query=${encodeURIComponent(
-    query
-  )}&language=zh-CN&region=CN&page=1&include_adult=false`
-
-  const resp = await fetch(`${TMDB_BASE_URL}${endpoint}`, {
-    headers: {
-      Authorization: `Bearer ${TMDB_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-  })
-
-  if (!resp.ok) {
-    throw new Error(`TMDB 搜索失败: ${resp.status}`)
-  }
-
-  const data = await resp.json()
-  return Array.isArray(data.results) ? data.results.slice(0, TMDB_FALLBACK_MAX_FETCH) : []
-}
 
 function mapTmdbToLocalMovie(tmdbMovie) {
   const year = tmdbMovie.release_date ? String(tmdbMovie.release_date).slice(0, 4) : null
@@ -51,10 +27,10 @@ async function getMovieTableColumns() {
 }
 
 async function persistTmdbMovies(tmdbMovies) {
-  if (!tmdbMovies.length) return 0
+  if (!tmdbMovies.length) return { count: 0, ids: [] }
   const columns = await getMovieTableColumns()
   const hasTmdbId = columns.has('tmdb_id')
-  let persisted = 0
+  const ids = []
 
   for (const rawMovie of tmdbMovies) {
     const movie = mapTmdbToLocalMovie(rawMovie)
@@ -98,7 +74,7 @@ async function persistTmdbMovies(tmdbMovies) {
       if (clauses.length > 0) {
         await db.query(`UPDATE movies SET ${clauses.join(', ')} WHERE id = ?`, [...params, existingId])
       }
-      persisted += 1
+      ids.push(existingId)
       continue
     }
 
@@ -118,14 +94,41 @@ async function persistTmdbMovies(tmdbMovies) {
 
     const keys = Object.keys(payload)
     const placeholders = keys.map(() => '?').join(', ')
-    await db.query(
+    const [result] = await db.query(
       `INSERT INTO movies (${keys.join(', ')}) VALUES (${placeholders})`,
       keys.map((k) => payload[k])
     )
-    persisted += 1
+    ids.push(result.insertId)
   }
 
-  return persisted
+  return { count: ids.length, ids }
+}
+
+async function fetchMoviesByIds(ids) {
+  if (!ids.length) return []
+  const placeholders = ids.map(() => '?').join(', ')
+  const [rows] = await db.query(`SELECT * FROM movies WHERE id IN (${placeholders})`, ids)
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  return ids
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .map((movie) => ({ ...movie, documentId: movie.id }))
+}
+
+function mergeMovieResults(localRows, tmdbRows, pageSize) {
+  const seen = new Set()
+  const merged = []
+  for (const row of localRows) {
+    if (seen.has(row.id)) continue
+    seen.add(row.id)
+    merged.push(row)
+  }
+  for (const row of tmdbRows) {
+    if (seen.has(row.id)) continue
+    seen.add(row.id)
+    merged.push(row)
+  }
+  return merged.slice(0, pageSize)
 }
 
 function buildQueryContext(query) {
@@ -212,6 +215,7 @@ exports.getMovies = async (req, res) => {
     let tmdbPersisted = 0
     let fallbackTriggered = false
     let fallbackError = false
+    let fallbackErrorReason = null
 
     if (
       useHybrid &&
@@ -221,16 +225,36 @@ exports.getMovies = async (req, res) => {
     ) {
       fallbackTriggered = true
       try {
-        const tmdbMovies = await searchTmdbMovies(queryCtx.q)
-        tmdbFetched = tmdbMovies.length
-        tmdbPersisted = await persistTmdbMovies(tmdbMovies)
-        if (tmdbPersisted > 0) {
-          pageResult = await queryMoviesPage(queryCtx)
-          source = pageResult.data.length > 0 ? 'mixed' : 'tmdb'
+        if (!hasTmdbToken()) {
+          fallbackError = true
+          fallbackErrorReason = 'missing_token'
+        } else {
+          const tmdbMovies = await searchTmdbMovies(queryCtx.q)
+          tmdbFetched = tmdbMovies.length
+          const { count, ids } = await persistTmdbMovies(tmdbMovies)
+          tmdbPersisted = count
+          if (ids.length > 0) {
+            const tmdbRows = await fetchMoviesByIds(ids)
+            const merged = mergeMovieResults(pageResult.data, tmdbRows, queryCtx.pageSize)
+            const hasLocal = pageResult.data.length > 0
+            const hasTmdb = tmdbRows.length > 0
+            source = hasLocal && hasTmdb ? 'mixed' : hasLocal ? 'local' : hasTmdb ? 'tmdb' : 'local'
+            const total = Math.max(pageResult.pagination.total, merged.length)
+            pageResult = {
+              data: merged,
+              pagination: {
+                page: queryCtx.page,
+                pageSize: queryCtx.pageSize,
+                total,
+                totalPages: total === 0 ? 0 : Math.ceil(total / queryCtx.pageSize),
+              },
+            }
+          }
         }
       } catch (tmdbErr) {
         fallbackError = true
-        console.error('hybrid fallback error:', tmdbErr)
+        fallbackErrorReason = tmdbErr.code || 'network_error'
+        console.error('hybrid fallback error:', tmdbErr.message || tmdbErr)
       }
     }
 
@@ -262,6 +286,8 @@ exports.getMovies = async (req, res) => {
           source,
           hybrid: useHybrid,
           fallbackTriggered,
+          fallbackError,
+          fallbackErrorReason,
           localCountBeforeFallback,
           tmdbFetched,
           tmdbPersisted,

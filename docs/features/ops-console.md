@@ -1,7 +1,7 @@
 # 运营控制台
 
 - 状态：已实现
-- 最后核对日期：2026-08-23
+- 最后核对日期：2026-08-25
 
 ## 1. 目标
 
@@ -27,7 +27,7 @@ MovieMate C 端社区的 **B 面**：后台角色按固定权限矩阵进入运�
 | 角色 | 含义 | 进运营台 | 改角色 | 封禁/锁定 | 审评论 | 看审计 | 看注册用户数 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `user` | 普通用户 | 否 | 否 | 否 | 否 | 否 | 否 |
-| `moderator` | 内容审核 | 是 | 否 | 否 | 是 | 否 | 是 |
+| `moderator` | 内容审核 | 是 | 否 | 否 | 是 | 是 | 是 |
 | `operator` | 运营 | 是 | 否 | 仅 `user` | 是 | 是 | 是 |
 | `admin` | 系统管理员 | 是 | 是 | 除自己外均可 | 是 | 是 | 是 |
 
@@ -47,13 +47,13 @@ MovieMate C 端社区的 **B 面**：后台角色按固定权限矩阵进入运�
 | `users.manage` | 用户列表、封禁/锁定/解封 | `operator`、`admin` |
 | `users.role` | 修改他人角色 | 仅 `admin` |
 | `reviews.moderate` | 评论列表、删除评论 | `moderator`、`operator`、`admin` |
-| `audit.read` | 审计日志 | `operator`、`admin` |
+| `audit.read` | 审计日志 | `moderator`、`operator`、`admin` |
 | `analytics.userCount` | 数据洞察「注册用户」计数 | 全部 staff |
 
 数据库：`users.role ENUM('user','moderator','operator','admin')`。
 
-- 新库：[`server/sql/init.sql`](../../server/sql/init.sql)（已含四档 `role`）
-- 增量：[`server/sql/analytics_ops_upgrade.sql`](../../server/sql/analytics_ops_upgrade.sql) + [`server/sql/rbac_upgrade.sql`](../../server/sql/rbac_upgrade.sql)
+- 新库：[`server/sql/init.sql`](../../server/sql/init.sql)（已含四档 `role` 与 `admin_audit_log`）
+- 增量：[`server/sql/analytics_ops_upgrade.sql`](../../server/sql/analytics_ops_upgrade.sql) + [`server/sql/rbac_upgrade.sql`](../../server/sql/rbac_upgrade.sql)（旧库若缺审计表可执行；运行时 handler 也会 `CREATE TABLE IF NOT EXISTS`）
 
 中间件：[`server/middleware/adminMiddleware.js`](../../server/middleware/adminMiddleware.js) 校验 `isStaff(role)`，并将 `role` + `permissions` 挂到 `req.adminUser`。
 
@@ -90,7 +90,7 @@ UPDATE users SET role = 'admin' WHERE id = 1 LIMIT 1;
 ## 7. 验收
 
 - [ ] 普通用户：无运营台入口；打开 `/admin` 显示无权限
-- [ ] `moderator`：仅评论审核 Tab
+- [ ] `moderator`：评论审核 Tab + 审计日志 Tab（只读）
 - [ ] `operator`：可封禁普通用户，不能改角色、不能封后台账号
 - [ ] `admin`：可改他人角色，可管理其他管理员
 - [ ] 封禁用户后该用户无法登录（403）

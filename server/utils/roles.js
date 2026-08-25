@@ -6,6 +6,7 @@ const PERMISSIONS = {
   user: {},
   moderator: {
     'reviews.moderate': true,
+    'audit.read': true,
     'analytics.userCount': true,
   },
   operator: {

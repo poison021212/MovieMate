@@ -83,6 +83,8 @@ const MovieApi = createApi({
             source: 'local',
             hybrid: false,
             fallbackTriggered: false,
+            fallbackError: false,
+            fallbackErrorReason: null,
             tmdbFetched: 0,
             tmdbPersisted: 0,
             aggregate: undefined,

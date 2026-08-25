@@ -253,6 +253,19 @@ const MovieList = () => {
         />
       )}
 
+      {meta?.fallbackError && searchTerm && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginTop: 16 }}
+          message={
+            meta.fallbackErrorReason === 'missing_token'
+              ? 'TMDB 回退不可用：请在后端 server/.env 配置 TMDB_ACCESS_TOKEN'
+              : `TMDB 回退失败（${meta.fallbackErrorReason || 'network_error'}），请检查网络或配置 HTTPS_PROXY / HTTP_PROXY`
+          }
+        />
+      )}
+
       {hybridStats && searchTerm && (
         <Collapse
           style={{ marginTop: 12 }}
@@ -311,7 +324,11 @@ const MovieList = () => {
       )}
 
       {movies.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 40 }}>未找到相关电影</div>
+        <div style={{ textAlign: 'center', padding: 40 }}>
+          {meta?.fallbackError && searchTerm
+            ? '本地未命中，且 TMDB 回退未能补充结果'
+            : '未找到相关电影'}
+        </div>
       )}
 
       <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}>

@@ -83,6 +83,17 @@ CREATE TABLE IF NOT EXISTS review_replies (
   KEY idx_reply_review (review_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  admin_username VARCHAR(15) NOT NULL,
+  action VARCHAR(64) NOT NULL,
+  target_type VARCHAR(32) NULL,
+  target_id VARCHAR(64) NULL,
+  detail JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_audit_admin (admin_username, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 示例电影（可按需删除或替换 poster 为本地 /uploads/ 路径）
 INSERT INTO movies (title, rating, poster, director, actors, genre, duration, year, summary) VALUES
 ('肖申克的救赎', 9.7, 'https://image.tmdb.org/t/p/w500/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg', '弗兰克·德拉邦特', '蒂姆·罗宾斯, 摩根·弗里曼', '剧情', '142 分钟', '1994', '银行家安迪被冤入狱，在肖申克监狱中用希望与友谊改变命运。'),

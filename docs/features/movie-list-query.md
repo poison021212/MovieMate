@@ -2,7 +2,7 @@
 
 - 状态：已实现
 - 负责人：MovieMate 维护者
-- 最后核对日期：2026-08-21
+- 最后核对日期：2026-08-25
 
 ## 1. 目标
 
@@ -54,7 +54,7 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 
 列表项含 `documentId`（等于 `id`），兼容历史 Strapi 形态。前端 `transformResponse` 返回 `{ items, pagination, meta }`。
 
-当 `hybrid=1` 且第一页关键词搜索结果少于阈值（默认 5 条）时，后端会尝试 TMDB 并写回 `movies` 再查本地。`meta` 含 `source`、`fallbackTriggered`、`localCountBeforeFallback`、`tmdbFetched`、`tmdbPersisted`、`aggregate`。
+当 `hybrid=1` 且第一页关键词搜索结果少于阈值（默认 5 条）时，后端会尝试 TMDB 并写回 `movies`，再按**持久化后的本地 id** 与本地 LIKE 结果合并返回（不再仅依赖二次 LIKE，避免中文片名与英文关键词不匹配导致空列表）。`meta` 含 `source`、`fallbackTriggered`、`fallbackError`、`fallbackErrorReason`、`localCountBeforeFallback`、`tmdbFetched`、`tmdbPersisted`、`aggregate`。
 
 累计比率（`aggregate` / `hybrid-stats`）：
 
@@ -101,7 +101,7 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 
 ## 8. 实现位置
 
-- 后端：[`server/router_handler/movie.js`](../../server/router_handler/movie.js)、[`server/router/movie.js`](../../server/router/movie.js)
+- 后端：[`server/router_handler/movie.js`](../../server/router_handler/movie.js)、[`server/utils/tmdbClient.js`](../../server/utils/tmdbClient.js)、[`server/router/movie.js`](../../server/router/movie.js)
 - 前端 API：[`client/src/store/API/MovieApi.jsx`](../../client/src/store/API/MovieApi.jsx)
 - 前端页面：[`client/src/components/MovieList.jsx`](../../client/src/components/MovieList.jsx)、[`client/src/components/MovieCard.jsx`](../../client/src/components/MovieCard.jsx)
 - Hook：[`client/src/hooks/useMovieItems.jsx`](../../client/src/hooks/useMovieItems.jsx)

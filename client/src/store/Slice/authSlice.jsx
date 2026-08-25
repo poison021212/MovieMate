@@ -20,6 +20,7 @@ const initialAuthState = {
   token: '',
   userInfo: null,
   tokenExpireTime: 0,
+  sessionStatus: 'bootstrapping',
 }
 
 export const authSlice = createSlice({
@@ -38,11 +39,15 @@ export const authSlice = createSlice({
         timeout = parseInt(expiresIn, 10) * 60 * 1000
       }
       state.tokenExpireTime = Date.now() + timeout
+      state.sessionStatus = 'ready'
     },
     logout: (state) => {
-      Object.assign(state, initialAuthState)
+      Object.assign(state, { ...initialAuthState, sessionStatus: 'ready' })
+    },
+    sessionBootstrapFailed: (state) => {
+      state.sessionStatus = 'ready'
     },
   },
 })
 
-export const { loginSuccess, logout } = authSlice.actions
+export const { loginSuccess, logout, sessionBootstrapFailed } = authSlice.actions

@@ -4,11 +4,12 @@ import { API_BASE } from './apiBase'
 
 const adminApi = createApi({
   reducerPath: 'adminApi',
-  tagTypes: ['AdminUsers', 'AdminReviews', 'AdminAudit'],
+  tagTypes: ['AdminMe', 'AdminUsers', 'AdminReviews', 'AdminAudit'],
   baseQuery: createBaseQueryWithReauth(API_BASE),
   endpoints: (builder) => ({
     getAdminMe: builder.query({
       query: () => 'admin/me',
+      providesTags: ['AdminMe'],
     }),
     listAdminUsers: builder.query({
       query: () => 'admin/users',

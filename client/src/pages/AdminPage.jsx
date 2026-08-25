@@ -1,5 +1,6 @@
 import React from 'react'
-import { Card, Table, Tag, Button, Space, Tabs, Typography, message, Popconfirm, Select } from 'antd'
+import { Card, Table, Tag, Button, Space, Tabs, Typography, message, Popconfirm, Select, Alert } from 'antd'
+import { useSelector } from 'react-redux'
 import {
   useGetAdminMeQuery,
   useListAdminUsersQuery,
@@ -11,13 +12,37 @@ import {
 } from '@/store/API/adminApi'
 import NeedAuth from '@/components/NeedAuth'
 import { isStaff, ROLE_LABELS, STAFF_ROLES } from '@/utils/roles'
+import { formatQueryError } from '@/utils/formatQueryError'
 
 const { Title, Text } = Typography
 
 const ALL_ROLES = ['user', ...STAFF_ROLES]
 
+function formatAuditDetail(detail) {
+  if (!detail) return ''
+  let obj = detail
+  if (typeof detail === 'string') {
+    try {
+      obj = JSON.parse(detail)
+    } catch {
+      return detail
+    }
+  }
+  const parts = []
+  if (obj.targetUsername) parts.push(`用户: ${obj.targetUsername}`)
+  if (obj.username) parts.push(`评论者: ${obj.username}`)
+  if (obj.movieId != null) parts.push(`电影ID: ${obj.movieId}`)
+  if (obj.status) parts.push(`状态: ${obj.status}`)
+  if (obj.role) parts.push(`角色: ${obj.role}`)
+  if (obj.previousRole) parts.push(`原角色: ${obj.previousRole}`)
+  return parts.length ? parts.join(' · ') : JSON.stringify(obj)
+}
+
 function AdminContent() {
-  const { data: meData, error: meError, isLoading: meLoading } = useGetAdminMeQuery()
+  const auth = useSelector((state) => state.auth)
+  const { data: meData, error: meError, isLoading: meLoading } = useGetAdminMeQuery(undefined, {
+    skip: !auth.isLogin,
+  })
   const permissions = meData?.admin?.permissions || {}
   const canManageUsers = Boolean(permissions['users.manage'])
   const canChangeRole = Boolean(permissions['users.role'])
@@ -27,13 +52,18 @@ function AdminContent() {
   const myUsername = meData?.admin?.username
 
   const { data: usersData, isLoading: usersLoading } = useListAdminUsersQuery(undefined, {
-    skip: !canManageUsers,
+    skip: !auth.isLogin || !canManageUsers,
   })
   const { data: reviewsData, isLoading: reviewsLoading } = useListAdminReviewsQuery(undefined, {
-    skip: !canModerateReviews,
+    skip: !auth.isLogin || !canModerateReviews,
   })
-  const { data: auditData, isLoading: auditLoading } = useListAdminAuditQuery(undefined, {
-    skip: !canReadAudit,
+  const {
+    data: auditData,
+    isLoading: auditLoading,
+    isError: auditError,
+    error: auditQueryError,
+  } = useListAdminAuditQuery(undefined, {
+    skip: !auth.isLogin || !canReadAudit,
   })
   const [updateStatus] = useUpdateUserStatusMutation()
   const [updateRole] = useUpdateUserRoleMutation()
@@ -160,7 +190,15 @@ function AdminContent() {
     { title: '时间', dataIndex: 'created_at', width: 170 },
     { title: '管理员', dataIndex: 'admin_username', width: 100 },
     { title: '动作', dataIndex: 'action' },
-    { title: '目标', render: (_, r) => `${r.target_type || '-'} #${r.target_id || '-'}` },
+    {
+      title: '目标',
+      render: (_, r) => `${r.target_type || '-'} #${r.target_id || '-'}`,
+    },
+    {
+      title: '详情',
+      ellipsis: true,
+      render: (_, r) => formatAuditDetail(r.detail),
+    },
   ]
 
   const tabItems = [
@@ -195,7 +233,14 @@ function AdminContent() {
     canReadAudit && {
       key: 'audit',
       label: '审计日志',
-      children: (
+      children: auditError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="加载审计日志失败"
+          description={formatQueryError(auditQueryError)}
+        />
+      ) : (
         <Table
           rowKey="id"
           loading={auditLoading}

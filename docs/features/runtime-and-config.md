@@ -2,7 +2,7 @@
 
 - 状态：已实现
 - 负责人：MovieMate 维护者
-- 最后核对日期：2026-08-23
+- 最后核对日期：2026-08-25
 
 ## 1. 目标
 
@@ -68,7 +68,8 @@ git checkout clean-structure
 | `DB_HOST` / `DB_USER` / `DB_PASS` / `DB_NAME` | 是 | MySQL 连接 |
 | `JWT_SECRET` / `JWT_EXPIRE` | 是 | 登录令牌 |
 | `PORT` | 否 | 默认 1337 |
-| `TMDB_ACCESS_TOKEN` | 否 | TMDB + 同步脚本 |
+| `TMDB_ACCESS_TOKEN` | 否 | TMDB + 同步脚本 + Hybrid 搜索回退 |
+| `HTTPS_PROXY` / `HTTP_PROXY` | 否 | TMDB 请求代理（同步脚本与运行时 Hybrid 搜索均支持） |
 | `LLM_BASE_URL` | 否 | 默认 `http://127.0.0.1:11434/v1/chat/completions`（本机 Ollama） |
 | `LLM_MODEL` | 否 | 默认 `qwen2.5:7b`；**必须与 `ollama list` 输出的 NAME 完全一致**（如 `qwen3.5:cloud`） |
 | `LLM_API_KEY` | 否 | 云端 OpenAI 兼容 API Key；本机 Ollama 可留空 |

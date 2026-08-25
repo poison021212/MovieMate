@@ -50,7 +50,7 @@ staff 定义见 [ops-console.md](./ops-console.md)。脱敏在服务端完成（
 | `aiForecast[]` | LLM 可用时（本机 Ollama 或云端 Key）且校验通过时的 LLM 外推 |
 | `explanation` | 中文说明 |
 | `method` | `wma+linear` / `ai-constrained` / `insufficient-data` |
-| `insufficient` | 快照不足（<5 点）时为 true，**禁止**用上映年份冒充热度 |
+| `insufficient` | 快照不足（<5 个 `YYYY-MM-DD` 日点，且 `genre IS NULL`、`avg_popularity` 非空）时为 true；DATE 列必须格式化为日期字符串，**禁止**用上映年份冒充热度 |
 
 ## 5. 数据作业
 

@@ -102,6 +102,15 @@ function weightedMovingAverage(values, weights = [0.5, 0.3, 0.2]) {
 
 const MIN_SNAPSHOT_POINTS = 5
 
+/** mysql2 默认把 DATE 转成 Date 对象，String(date).slice(0,10) 会变成 "Wed Aug 19" 导致误判数据不足。 */
+function formatSnapshotBucket(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10)
+  }
+  const match = String(value ?? '').match(/^(\d{4}-\d{2}-\d{2})/)
+  return match ? match[1] : String(value ?? '').slice(0, 10)
+}
+
 async function callQwenJson(messages) {
   if (!hasLlm()) return null
   const controller = new AbortController()
@@ -185,7 +194,7 @@ async function getForecastSeries({ genre = '', horizon = 3 } = {}) {
   let history = []
   try {
     const params = []
-    let sql = `SELECT snapshot_date AS bucket, avg_popularity AS value
+    let sql = `SELECT DATE_FORMAT(snapshot_date, '%Y-%m-%d') AS bucket, avg_popularity AS value
                FROM analytics_snapshots
                WHERE avg_popularity IS NOT NULL`
     if (genreFilter) {
@@ -197,7 +206,7 @@ async function getForecastSeries({ genre = '', horizon = 3 } = {}) {
     sql += ' ORDER BY snapshot_date ASC LIMIT 24'
     const [snapRows] = await db.query(sql, params)
     history = snapRows.map((r) => ({
-      bucket: String(r.bucket).slice(0, 10),
+      bucket: formatSnapshotBucket(r.bucket),
       value: Number(Number(r.value).toFixed(2)),
     }))
   } catch {

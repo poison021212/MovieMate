@@ -3,13 +3,7 @@
 -- 若列已存在，跳过对应 ALTER 即可
 
 USE movie_db;
-
-ALTER TABLE users
-  ADD COLUMN email_verified TINYINT(1) NOT NULL DEFAULT 0;
-
-ALTER TABLE users
-  ADD COLUMN status ENUM('active', 'locked', 'banned') NOT NULL DEFAULT 'active';
-
+SET SQL_SAFE_UPDATES = 0;
 UPDATE users SET email_verified = 1;
 
 CREATE TABLE IF NOT EXISTS email_verification_tokens (
@@ -48,3 +42,5 @@ CREATE TABLE IF NOT EXISTS refresh_sessions (
   KEY idx_refresh_user (user_id),
   CONSTRAINT fk_refresh_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+SET SQL_SAFE_UPDATES = 1;

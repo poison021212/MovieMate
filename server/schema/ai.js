@@ -33,12 +33,14 @@ exports.chatResponse_schema = joi.object({
   movies: joi
     .array()
     .items(
-      joi.object({
-        title: joi.string().required(),
-        reason: joi.string().required(),
-        year: joi.alternatives().try(joi.number(), joi.string()).optional(),
-        tmdb_id: joi.alternatives().try(joi.number(), joi.string()).optional(),
-      })
+      joi
+        .object({
+          title: joi.string().required(),
+          reason: joi.string().required(),
+          year: joi.alternatives().try(joi.number(), joi.string()).allow(null, '').optional(),
+          tmdb_id: joi.alternatives().try(joi.number(), joi.string()).allow(null, '').optional(),
+        })
+        .unknown(true)
     )
     .max(8)
     .required(),

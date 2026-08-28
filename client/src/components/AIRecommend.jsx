@@ -44,6 +44,10 @@ function posterUrl(movie) {
   return '/no-image.png';
 }
 
+function usableChatMovies(movies) {
+  return (movies || []).filter((m) => m && String(m.title || '').trim() && m.title !== '暂无');
+}
+
 function MovieCard({ movie, onDetail, showFeedback, onFeedback, feedbackDisabled }) {
   return (
     <Card size="small" style={{ marginBottom: 12 }} bodyStyle={{ padding: 12 }}>
@@ -321,7 +325,7 @@ const AIRecommend = () => {
       setStreamingText('');
       if (donePayload) {
         setActiveSessionId(donePayload.sessionId);
-        setChatMovies(donePayload.movies || []);
+        setChatMovies(usableChatMovies(donePayload.movies));
         setLastChatMode(donePayload.meta?.mode || null);
         setLastAgentTrace(donePayload.meta?.agentTrace || traceAcc);
         setLastSources(donePayload.meta?.sources || []);

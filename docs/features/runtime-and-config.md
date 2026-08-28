@@ -2,7 +2,7 @@
 
 - 状态：已实现
 - 负责人：MovieMate 维护者
-- 最后核对日期：2026-08-25
+- 最后核对日期：2026-08-26
 
 ## 1. 目标
 
@@ -90,6 +90,9 @@ git checkout clean-structure
 | --- | --- | --- | --- |
 | DeepSeek | `https://api.deepseek.com/chat/completions` | `deepseek-chat` | `LLM_API_KEY` 或 `DEEPSEEK_API_KEY` |
 | 千问 DashScope | `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions` | `qwen-turbo` | `DASHSCOPE_API_KEY` |
+| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | `glm-4.7` | `LLM_API_KEY` |
+
+`LLM_BASE_URL` 必须是 **chat completions 的完整 URL**（本仓库 `llmClient` 会直接 POST 到该地址）。智谱若只写成 `https://open.bigmodel.cn/api/paas/v4`，会返回 404「未找到」，对话页表现为「AI 服务暂不可用（glm-4.7: (404): 未找到）」。
 
 实现：[`server/utils/llmClient.js`](../../server/utils/llmClient.js)
 

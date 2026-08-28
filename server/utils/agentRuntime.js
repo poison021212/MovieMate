@@ -328,11 +328,14 @@ async function callQwenAgent(messages, useTools = true, stream = false) {
   })
 }
 
-async function streamWriteUserReply({ convo, chatMode, draftReply, emit }) {
+async function streamWriteUserReply({ convo, chatMode, draftReply, emit, movieTitles = '' }) {
   const hint =
     '根据以上对话与工具结果，用中文写出给用户的最终回复。只输出正文，不要 JSON，不要调用工具。' +
     `当前模式：${chatMode}。不要编造工具未提供的事实。` +
-    (chatMode === 'recommend' ? '简要说明推荐理由即可，不必重复罗列完整片单。' : '') +
+    (chatMode === 'recommend'
+      ? '简要说明推荐理由即可，不必重复罗列完整片单。' +
+        (movieTitles ? `片单仅限以下已入选影片，禁止另推未列出的片名：${movieTitles}。` : '')
+      : '') +
     (draftReply ? `\n可参考草稿：${String(draftReply).slice(0, 500)}` : '')
 
   const writeConvo = applyPromptBudget([
@@ -370,12 +373,38 @@ async function searchLocalMovies(args) {
     params.push(Number(args.minRating))
   }
   const [rows] = await db.query(
-    `SELECT id, title, genre, year, rating, summary
+    `SELECT id, title, genre, year, rating, summary, poster, tmdb_id
      FROM movies WHERE ${conditions.join(' AND ')}
      ORDER BY rating DESC LIMIT ?`,
     [...params, limit]
   )
   return { items: rows }
+}
+
+function mergeCandidates(ctx, incoming) {
+  const list = [...(ctx.candidates || []), ...(incoming || [])]
+  const seen = new Set()
+  ctx.candidates = []
+  for (const c of list) {
+    if (!c) continue
+    const key = c.id ? `t:${c.id}` : c.local_id ? `l:${c.local_id}` : `n:${c.title}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    ctx.candidates.push(c)
+  }
+}
+
+function localRowsToCandidates(rows) {
+  return (rows || []).map((row) => ({
+    id: row.tmdb_id || null,
+    local_id: row.id,
+    title: row.title,
+    year: row.year || '未知',
+    overview: row.summary,
+    vote_average: row.rating,
+    poster: row.poster || null,
+    poster_path: null,
+  }))
 }
 
 async function executeAgentTool(name, args, ctx) {
@@ -396,6 +425,7 @@ async function executeAgentTool(name, args, ctx) {
     }
     case 'search_local_movies': {
       const result = await searchLocalMovies(args)
+      mergeCandidates(ctx, localRowsToCandidates(result.items))
       ctx.sources.push({ type: 'local_search', q: args.q, count: result.items.length })
       return result
     }
@@ -415,10 +445,7 @@ async function executeAgentTool(name, args, ctx) {
         const data = await tmdbFetch('/movie/popular?language=zh-CN&page=1')
         results = (data.results || []).slice(0, limit).map(mapTmdbCandidate)
       }
-      ctx.candidates.push(...results)
-      const dedup = new Map()
-      ctx.candidates.forEach((c) => dedup.set(c.id, c))
-      ctx.candidates = [...dedup.values()]
+      mergeCandidates(ctx, results)
       ctx.sources.push({ type: 'tmdb', mode, count: results.length, ids: results.map((r) => r.id) })
       return { count: results.length, items: results }
     }
@@ -516,6 +543,7 @@ async function runToolWithRetry(toolName, args, ctx, agentTrace, attempt = 1) {
     if (toolName === 'search_tmdb') {
       const q = args.query || '热门'
       const local = await searchLocalMovies({ q, limit: args.limit || 8 })
+      mergeCandidates(ctx, localRowsToCandidates(local.items))
       ctx.sources.push({ type: 'degraded_local', from: 'search_tmdb', q })
       agentTrace.push({
         tool: 'search_local_movies',
@@ -531,20 +559,82 @@ async function runToolWithRetry(toolName, args, ctx, agentTrace, attempt = 1) {
   }
 }
 
+function isPlaceholderMovie(movie) {
+  const title = String(movie?.title || '').trim()
+  return !title || title === '暂无'
+}
+
+function normalizeFinishPayload(payload) {
+  const rawMovies = Array.isArray(payload?.movies) ? payload.movies : []
+  const movies = rawMovies
+    .map((m) => ({
+      title: String(m?.title || m?.name || '').trim(),
+      reason: String(m?.reason || m?.why || '根据检索结果推荐').trim() || '根据检索结果推荐',
+      year: m?.year != null && m.year !== '' ? String(m.year) : '未知',
+      tmdb_id: m?.tmdb_id || m?.id || null,
+      local_movie_id: m?.local_movie_id || m?.local_id || null,
+    }))
+    .filter((m) => !isPlaceholderMovie(m))
+  return {
+    reply: String(payload?.reply || '').trim() || '好的。',
+    movies,
+  }
+}
+
 function enrichAgentMovies(movies, ctx) {
-  return (movies || []).map((movie) => {
+  return (movies || []).filter((m) => !isPlaceholderMovie(m)).map((movie) => {
     const tmdbId = movie.tmdb_id || movie.id || null
-    const candidate = ctx.candidates.find((c) => Number(c.id) === Number(tmdbId))
-    const localMovieId = tmdbId ? ctx.localIdByTmdb.get(Number(tmdbId)) || null : null
+    const candidate =
+      ctx.candidates.find((c) => tmdbId && Number(c.id) === Number(tmdbId)) ||
+      ctx.candidates.find((c) => c.title === movie.title) ||
+      ctx.candidates.find((c) => movie.local_movie_id && Number(c.local_id) === Number(movie.local_movie_id))
+    const localMovieId =
+      movie.local_movie_id ||
+      candidate?.local_id ||
+      (tmdbId ? ctx.localIdByTmdb.get(Number(tmdbId)) || null : null)
+    const poster = movie.poster || candidate?.poster || null
+    const poster_path = movie.poster_path || candidate?.poster_path || null
     return {
       ...movie,
-      id: tmdbId,
-      tmdb_id: tmdbId,
-      local_movie_id: localMovieId,
-      poster_path: candidate?.poster_path || null,
-      vote_average: candidate?.vote_average || null,
+      id: tmdbId || candidate?.id || null,
+      tmdb_id: tmdbId || candidate?.id || null,
+      local_movie_id: localMovieId || null,
+      poster,
+      poster_path,
+      vote_average: movie.vote_average || candidate?.vote_average || null,
     }
   })
+}
+
+async function hydrateMoviesFromLocalDb(movies) {
+  const hydrated = []
+  for (const movie of movies || []) {
+    if (movie.local_movie_id && (movie.poster || movie.poster_path)) {
+      hydrated.push(movie)
+      continue
+    }
+    const title = String(movie.title || '').trim()
+    if (!title) continue
+    const [rows] = await db.query(
+      `SELECT id, title, year, poster, tmdb_id, rating FROM movies
+       WHERE title = ? OR title LIKE ? ORDER BY (title = ?) DESC, rating DESC LIMIT 1`,
+      [title, `%${title}%`, title]
+    )
+    const row = rows[0]
+    if (!row) {
+      hydrated.push(movie)
+      continue
+    }
+    hydrated.push({
+      ...movie,
+      year: movie.year && movie.year !== '未知' ? movie.year : row.year,
+      tmdb_id: movie.tmdb_id || row.tmdb_id || null,
+      local_movie_id: movie.local_movie_id || row.id,
+      poster: movie.poster || row.poster || null,
+      rating: movie.rating || row.rating,
+    })
+  }
+  return hydrated
 }
 
 async function buildDegradedReply(
@@ -596,7 +686,8 @@ async function buildDegradedReply(
     reason: '基于你的收藏与评论规则召回（Agent 降级）',
     year: m.year || '未知',
     tmdb_id: m.tmdb_id || null,
-    local_movie_id: m.id,
+    local_movie_id: m.local_movie_id || m.id,
+    poster: m.poster || null,
     poster_path: m.poster_path || null,
   }))
   const genres = tasteProfile?.topGenres?.join('、') || '综合'
@@ -622,11 +713,14 @@ function fallbackFromCandidates(ctx, partialPayload) {
     title: c.title,
     reason: partialPayload?.movies?.[0]?.reason || '基于已检索候选的兜底推荐',
     year: c.year || '未知',
-    tmdb_id: c.id,
+    tmdb_id: c.id || null,
+    local_movie_id: c.local_id || null,
+    poster: c.poster || null,
+    poster_path: c.poster_path || null,
   }))
   return {
     reply: partialPayload?.reply || '已根据检索结果为你挑选以下影片：',
-    movies: picked.length ? picked : [{ title: '暂无', reason: '请换关键词重试', year: '', tmdb_id: null }],
+    movies: picked,
   }
 }
 
@@ -810,10 +904,24 @@ async function runAgentChatTurnCore({
     }
   }
 
+  finalPayload = normalizeFinishPayload(finalPayload)
   const { error } = chatResponse_schema.validate(finalPayload)
   if (error) {
     if (chatMode === 'recommend') {
-      finalPayload = fallbackFromCandidates(ctx, finalPayload)
+      const fromCandidates = fallbackFromCandidates(ctx, finalPayload)
+      if (fromCandidates.movies.length) {
+        finalPayload = fromCandidates
+      } else {
+        const degraded = await buildDegradedReply(
+          username,
+          message,
+          tasteProfile,
+          chatMode,
+          ctx,
+          agentTrace
+        )
+        finalPayload = { reply: degraded.reply, movies: degraded.movies || [] }
+      }
       agentTrace.push({ tool: 'fallback_validate', ok: true, degraded: true, detail: error.message })
     } else {
       finalPayload = {
@@ -828,13 +936,36 @@ async function runAgentChatTurnCore({
     finalPayload.movies = []
   }
 
+  if (chatMode === 'recommend' && (!finalPayload.movies || finalPayload.movies.length === 0)) {
+    if (ctx.candidates.length) {
+      finalPayload = fallbackFromCandidates(ctx, finalPayload)
+      agentTrace.push({ tool: 'fallback_candidates', ok: true, degraded: true })
+    } else {
+      const degraded = await buildDegradedReply(
+        username,
+        message,
+        tasteProfile,
+        chatMode,
+        ctx,
+        agentTrace
+      )
+      finalPayload = { reply: degraded.reply, movies: degraded.movies || [] }
+      agentTrace.push({ tool: 'fallback_empty_movies', ok: true, degraded: true })
+    }
+  }
+
   if (typeof onEvent === 'function') {
     try {
+      const movieTitles = (finalPayload.movies || [])
+        .map((m) => m.title)
+        .filter(Boolean)
+        .join('、')
       const streamed = await streamWriteUserReply({
         convo,
         chatMode,
         draftReply: finalPayload.reply,
         emit,
+        movieTitles,
       })
       if (streamed) {
         finalPayload.reply = streamed
@@ -868,7 +999,9 @@ async function runAgentChatTurnCore({
     }
   }
 
-  const enrichedMovies = enrichAgentMovies(finalPayload.movies || [], ctx)
+  const enrichedMovies = await hydrateMoviesFromLocalDb(
+    enrichAgentMovies(finalPayload.movies || [], ctx)
+  )
 
   const result = {
     reply: finalPayload.reply,

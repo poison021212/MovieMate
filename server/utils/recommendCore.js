@@ -77,7 +77,7 @@ function detectIntent(prompt) {
 /** recommend：片单推荐；qa：电影事实问答；chat：话题闲聊（不强制出片） */
 function detectChatMode(message) {
   const t = String(message || '').trim()
-  const recommendSignals = /推荐|几部|类似|再来|片单|清单|还有什么|想看|来点/
+  const recommendSignals = /推荐|几部|类似|再来|换一批|片单|清单|还有什么|想看|来点/
   const qaSignals =
     /导演|制片人|出品|主编|编剧|主演|演员|简介|剧情|是谁|哪年|什么时候|评分|介绍|讲讲|讲述|讲了什么|讲的是|讲什么|梗概|内容|这部电影|哪部|什么叫|生平|上映|哪一部|谁拍/
   const chatSignals = /怎么看|聊聊|讨论|主题|叙事|观感|觉得|认为|风格|意义|深度|隐喻|象征|想法|观点/

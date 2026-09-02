@@ -117,6 +117,39 @@ if (!isStaff(role)) delete data.userCount  // 非 staff 直接删字段
 
 ---
 
+## 体验层 vs 安全层 · 面试说法精选(边界口径)
+
+**结论一句话**:
+
+> 前端的一切(JS、Redux、路由守卫)都运行在**用户的浏览器里**,用户随时可以绕过——直接 curl、改请求头、篡改脚本。所以"前端判断已登录"只是**画面层的状态**;真正的授权判定只能发生在用户够不到的地方:**后端中间件**。
+
+**用本项目证明"前端拦的是页面,不是数据"**:
+
+| 层 | 实现 | 它拦截什么 |
+|---|---|---|
+| 前端路由守卫 | `NeedAuth`:`!isLogin → <Navigate to="/auth">`([NeedAuth.jsx](client/src/components/NeedAuth.jsx)) | 路由跳转(没登录不渲染页面组件) |
+| 前端权限渲染 | `/admin/me` 下发 `permissions`,Tabs / 按钮按权限显隐([AdminPage.jsx](client/src/pages/AdminPage.jsx)) | UI 展示(普通用户看不到运营台菜单) |
+| **后端鉴权** | `authMiddleware`:验 JWT 签名 + 回查 DB `status`,非 active → 403([authMiddleware.js](server/middleware/authMiddleware.js)) | **数据本身** |
+| **后端授权** | `adminMiddleware` 回查 role + `isStaff`;handler 内 `hasPermission` + 目标护栏(operator 动 staff 403) | **操作本身** |
+
+**现场反证(最能说服面试官的一段)**:
+
+> "判断鉴权是不是真的在边界,做个实验:把前端守卫和菜单全删掉——接口依然是安全的,因为数据被后端挡住;反过来只靠前端守卫,打开 Console `fetch('/api/admin/users')` 就能拿到数据。所以:**前端守卫是门面,后端中间件才是锁**。"
+
+**被追问「那前端为什么还要做鉴权?」**(别答"没用")
+
+1. **体验闭环**:未登录用户被引导去登录页,登录后按 `state={{ from }}` 回跳;
+2. **减噪 + 信息最小化**:挡掉无意义请求(避免 401 风暴),也不把运营台 UI 结构暴露给普通用户;
+3. **防误操作**:权限不足的按钮 disabled——不是拦攻击者,是别让运营同事手滑。
+
+**收尾一句(两头都占住)**:
+
+> "前端只决定『显示什么』,后端决定『能不能拿』,两者职责分开,谁也不替谁兜底。权限点从 `/admin/me` 下发给前端,也只是为了让 UI 渲染对,不是授权——授权永远发生在 `adminMiddleware` 的 `isStaff` 和 handler 的 `hasPermission` 那一刻。"
+
+注:和简历①的 401 重放同理——refresh 成不成功由**服务端**判定,前端只是在结果之上重放请求。
+
+---
+
 ## 场景 / 系统设计题
 
 | 场景题 | 思路 |

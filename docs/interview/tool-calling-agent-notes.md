@@ -11,11 +11,20 @@
 
 > "我做的是**受控 Tool-calling 荐片 Agent**,核心是**让模型在约束里干活,而不是放飞它**。工具是白名单(plan_tasks / search_tmdb / search_local_movies / get_movie_detail / upsert_and_map_local / finish_recommend 等),**双守卫强制先 plan_tasks**——没 plan 就调业务工具会被 skip 并提示,最多 6 轮,每步结果回灌上下文直到出示片单。输入先**正则分流**(recommend / qa / chat),不同模式换不同的 system prompt(推荐强制出片单、问答禁编造)。回答分两段:工具执行阶段**非流式**,SSE 把每条 `trace` 实时推给前端(工具轨迹 Timeline);最终回复才**逐 token 真流式**(`token` 事件)。prompt 用**字符预算**截断(SYSTEM/HISTORY/TOOL/TOTAL,超预算丢最老、保最近上下文);LLM 超时、工具出错、6 轮不收敛、schema 校验失败**四级降级**,最终落到本地片库并打 `meta.degraded`——LLM 是不可靠组件,降级是默认路径的一部分。"
 
-**一句立框架**:`白名单 + 强制 plan + 步数上限 = 可控;正则分流 = 低延迟确定性;工具轨迹 SSE + 回复流式 = 可观测;预算裁剪 = 在小模型上下文里精打细算;降级链 = 把不可靠组件兜住`。
+**一句立框架**:`白名单 + 强制 plan + 步数上限 = 可控;正则分流 = 低延迟确定性;工具轨迹 SSE + 回复流式 = 可观测;预算裁剪 = 模型无关的上下文/成本策略(小模型硬约束,GLM 同样适用);降级链 = 把不可靠组件兜住`。
 
 ---
 
 ## 逐条深挖 · 项目级 Q&A
+
+### ⭐ 基础:工具 schema 怎么写(一切的前提)
+
+- **一个工具 = 一个对象**:`{ type:'function', function:{ name, description, parameters } }`;`AGENT_TOOLS` 就是 8 个这样的对象拼成的数组([agentRuntime.js:21-154](server/utils/agentRuntime.js#L21)),随请求体 `body.tools` + `tool_choice:'auto'` 发给模型(llmClient.js:104-106)。
+- **parameters 是 JSON Schema 结构**:`type:'object'` + `properties`(字段类型 / `enum` 枚举 / 数组嵌套 `items`)+ `required` 必填;`additionalProperties:false` 收紧,不允许模型多传字段。
+- **name 与代码写死配对**:模型返回 `tool_calls:[{name, arguments}]`,你的 `executeAgentTool` 按 name 分发执行——schema 的 name 拼错,代码永远匹配不上。
+- **description 是模型唯一的说明书**:模型看不到你的代码,全靠 description 判断"何时调哪个工具"——如 get_movie_detail 写"含导演/制片人/主演,用于事实问答",模型看到用户问导演就调它;模型选择工具的唯一依据就是这个 description。
+- **schema 双重身份**:既给模型当说明书,又给你代码当校验契约——`finish_recommend` 返回的 reply/movies 按 schema 校验,失败走 `fallback_validate` 降级(agentRuntime.js:910-931)。
+- **小模型坑**:老/弱模型不认 tools 字段会直接 400 "tools 不被该模型支持"(llmClient.js:70);嵌套太深的 schema 弱模型容易输出不合法 JSON,故 schema 尽量扁平。
 
 ### Q.1 ⭐"白名单工具循环"是什么?为什么强制先 plan_tasks?
 
@@ -26,6 +35,8 @@
   3. `plan_tasks` / `finish_recommend` **恒放行**(收尾工具不卡)。
   - 模型不按提示走(无 tool_calls 也无 plan)时,注入系统消息「你必须先调用 plan_tasks 输出执行计划」再 continue(812-817)。
 - **为什么**:不设防的 Agent = 不可预测;plan-first 把"先想清楚再动手"的步骤显式化,**心智模型**(819-821):每次模型回复要么是 plan、要么是计划内的工具调用、要么是 finish_recommend,三者必居其一——这就把无限的自由空间收敛成了可审计的三态。
+- **不强制会怎样(反向论证,面试先正后反)**:①行为不可预测/不可审计——工具有副作用(`upsert_and_map_local` 写库),乱序乱调可能无意乱写,出问题无法复现"它为什么先调这个";②绕远路浪费调用——该查本地库的先跑去 TMDB,该一步的多步;每步都是一次完整 LLM 调用(钱+延迟),plan 把路径压最短;③回路风险上升——没有显式计划更容易反复撞同一个工具,6 轮上限是最后保险,plan 是第一道;④收敛判断变难——有 plan 可对照"计划 vs 已执行"决定是否降级,没 plan 只剩"轮数到了没"。
+  - **守卫的价值**:违规不报错给用户,而是把错误意图以 `role:'tool'` 回灌修正行为——"走错了打回去重走",Agent 还在运转;类比:医生接诊先给检查方案,没方案就动刀的不是医生。
 
 ### Q.2 最多 6 步怎么设计?步数上限的动机?
 
@@ -44,6 +55,8 @@ const chatSignals    = /怎么看|聊聊|讨论|主题|叙事|观感|觉得|认�
 - 优先级:命中 recommend → `recommend`;命中 qa → `qa`;命中 chat → `chat`;**兜底 recommend**。
 - **为什么不用 LLM 分类**:三次调用 LLM 的成本 + ~秒级延迟换来的分类,与正则的确定性收益不对等;正则**零延迟、零成本、可测试、可解释**。局限(诚实):长尾表达覆盖有限,但兜底 recommend 保证"用户永远能得到片单"。
 - **分流的意义不只是路由,而是换行为**:`buildSystemPrompt`(189-217)三种 system 分支——recommend 强制出片单、qa 禁编造(有 grounded 检索就答、没有就明说不知道)、chat 不硬推。
+- **"LLM 分类"是什么(对立方案的完整理解)**:让大模型读一句话输出 recommend/qa/chat 标签,靠语义覆盖"像《盗梦空间》那样烧脑的还有吗"这类正则难命中的长尾;代价是每次输入**多一次完整 LLM 调用**(钱+串行延迟)、**结果抖动不可复现**(同句这次 qa 下次 chat,污染后续换 system prompt 的行为)、难测试。
+- **升级路径(讲边界加分)**:两级 router——先正则(便宜路径),未命中/低置信的表达再上抛给 LLM 或微调意图分类器;规则兜底 + 难例上抛是意图识别的常见生产架构。
 
 ### Q.4 ⭐prompt 字符预算截断怎么做?为什么"预算"化? (promptBudget.js)
 
@@ -54,7 +67,10 @@ const chatSignals    = /怎么看|聊聊|讨论|主题|叙事|观感|觉得|认�
   3. history 超预算 → **从最老的条目开始清空**直到 ≤6000;
   4. 总长超 16000 → 先丢最老的 history 条目,还不够再削 tool content 尾部。
   - **保留优先级**:当前 user 消息 + **最近的 tool 结果**——回答质量靠近期上下文,老历史最可牺牲。
-- **为什么预算化而不是单点截断**:本地小模型(qwen2.5:7b)上下文窗口小、token 成本与延迟敏感;预算常量集中管理,`applyPromptBudget` 在 agent 主循环和流式回复两处都调用,一处策略多处复用。
+- **为什么预算化而不是单点截断**:与模型无关——本地 qwen2.5:7b 时是小窗口的硬约束,线上切 GLM-4.7 后依然适用(token 成本/延迟/"保留谁丢弃谁"的质量策略,窗口大 ≠ 不用管);预算常量集中管理,`applyPromptBudget` 在 agent 主循环和流式回复两处都调用,一处策略多处复用。
+- **单点截断(naive 做法)长啥样**:只做一次总长判断、整段一刀切 `total > LIMIT → slice(0, LIMIT)`。三个灾难:①可能切掉**当前用户问题**(在末尾)或 system 指令(在开头),模型失去该答的内容或行为约束;②可能拆散**配对消息** `user → assistant(tool_calls) → tool(结果)` 让请求序列断裂——预算化专门保留带 tool_calls 的 assistant(见 promptBudget.js:74);③无保留优先级,该留的新上下文反而被丢。
+- **对比一句话**:单点截断是"超了就减",不知道减掉的是不是答好这个问题真正需要的东西;预算化回答取舍问题——同样要裁,裁谁留谁完全可解释。**上下文管理不是压缩,是一次有优先级的取舍。**
+- **预算数字怎么来(经验不是公式)**:四个数加起来才 12000/总闸 16000,远小于模型窗口——故意留白:①窗口里还要留出**模型的输出空间**(几百字片单回复);②上下文越满注意力越稀释、JSON 越易错(小模型尤甚),宁短勿长;③长上下文=更贵更慢。故数字是钩经验调出来的,做成 env 可覆盖,换模型/场景直接调参不动代码。
 - 配合**窗口裁剪**:多轮输入只取**最近 8 条**(`slice(-8)`,757-761),再叠加预算。又是第二层(见 Q9 会话摘要)。
 
 ### Q.5 SSE 怎么写?事件协议怎么设计?(前端如何消费)
@@ -98,9 +114,21 @@ const chatSignals    = /怎么看|聊聊|讨论|主题|叙事|观感|觉得|认�
 
 ### Q.10 LLM 客户端与限流
 
-- **客户端**([llmClient.js](server/utils/llmClient.js)):OpenAI 兼容协议,默认 `http://127.0.0.1:11434/v1/chat/completions`(Ollama)+ model `qwen2.5:7b`;有 `LLM_API_KEY`/DEEPSEEK/DASHSCOPE/GEMINI 时走对应云端(`hasLlm()` 判定)。`tools` 时 `tool_choice:'auto'`,**90s `AbortSignal.timeout`**,错误分类:404 模型未找到、400 tools 不被模型支持。
+- **客户端**([llmClient.js](server/utils/llmClient.js)):OpenAI 兼容协议,默认 `http://127.0.0.1:11434/v1/chat/completions`(Ollama)+ model `qwen2.5:7b`;有 `LLM_API_KEY`/DEEPSEEK/DASHSCOPE/GEMINI 时走对应云端(`hasLlm()` 判定)。**线上实际切 GLM-4.7**(env 覆盖 `LLM_BASE_URL`/`LLM_MODEL`/`LLM_API_KEY` 走智谱 OpenAI 兼容端点),模型层可插拔。`tools` 时 `tool_choice:'auto'`,**90s `AbortSignal.timeout`**,错误分类:404 模型未找到、400 tools 不被模型支持。
 - **温度分场景**:Agent 0.6(出片单要稳定)/ 单轮 0.7 / 会话摘要 0.3(压缩要准)。
 - **限流**:Agent 聊天**独立限流**(`agentChatRateLimit.js` 内存桶,每用户 **12 次/60s**,超限 429);单轮 `/recommend` 无线流。
+
+### Q.11 ⭐模型选型:为什么先 qwen2.5:7b、后切 GLM-4.7?怎么评估?(被问概率高)
+
+- **评估维度**(选模型答权衡,不答"它好"):任务能力匹配(**tool-calling Agent 最看 schema 遵循 / JSON 合法性 / 多步意图跟随**)、上下文、延迟(Agent 每轮完整调用,链路敏感)、成本、部署形态(本地 vs 云)、协议生态(OpenAI 兼容 → 可插拔)。
+- **两阶段故事**:
+  1. 最初 **qwen2.5:7b + Ollama 本地**:零成本、离线可调、Demo 够用;
+  2. **短板 → 切 GLM-4.7 云**:7B 对 schema 遵循不稳、偶发不合法 JSON、多步计划跟不牢;GLM 意图跟随稳、出 JSON 规范;
+  3. **代价**:引入网络依赖 + token 成本 → **降级链/重试/超时是默认路径而非异常分支**。
+- **架构红利**:OpenAI 兼容 + env 配置化(`LLM_BASE_URL`/`LLM_MODEL`/`LLM_API_KEY`,`hasLlm()` 自动判定),换模型只改配置不改代码——**选型是效果层决策,不该影响架构层**。
+- **评估方法**:`agentTrace` 可观测——同一批用例对比**工具调用合法率 / JSON 可解析率 / 收敛轮数 / 降级次数**(实测 qwen7B 降级多、GLM 明显少);无自动化 eval 是诚实短板,但 trace 能量化。
+- **追问预备**:"为什么不上最强模型"→ Agent 每轮完整调用 × 重试 × 多步,顶配烧钱,GLM 级够用;"会考虑更小模型吗"→ air 档/量化,用同一套 trace 回归,架构模型无关实验成本低。
+- **口径提醒**:GLM-4.7 具体参数(上下文/基准分)不硬背,不知道就说"选型逻辑与迁移理由如上"——吹数字风险大。
 
 ---
 
@@ -108,7 +136,7 @@ const chatSignals    = /怎么看|聊聊|讨论|主题|叙事|观感|觉得|认�
 
 | 考点 | 一句话要点 | 对应本项目 |
 |---|---|---|
-| **Tool/Function Calling 原理** | LLM 并不"执行"工具,它只是**结构化输出一个调用意图**(tool_calls),由你的代码执行后把结果回灌 | 每轮 `chatCompletions` → 解析 tool_calls → runToolWithRetry → `role:'tool'` 写回 |
+| **Tool/Function Calling 原理** | **模型只有"想法"没有"手"**——LLM 不执行工具,只结构化输出调用意图 JSON(tool_calls),由你的代码执行后以 `role:'tool'` 回灌;**解析→执行→回灌→再生成**的循环才是 Agent | 每轮 `chatCompletions` → 解析 tool_calls → runToolWithRetry → `role:'tool'` 写回 |
 | **Agent 循环 vs ReAct** | ReAct = thought→action→observation 三件套;你的简化版是 plan→工具→结果→再生成,plan 显式化 | 白名单 + plan 三态(plan / 计划内工具 / finish) |
 | **可控性设计** | 白名单、步数上限、schema 校验、skip 提示——把模型自由空间收敛成可审计路径 | MAX_TOOL_ROUNDS=6 + 双守卫 + chatResponse_schema |
 | **Prompt 预算/上下文管理** | 有界上下文里按优先级取舍:保留最近 + 关键,丢最老;预算常量集中管理 | SYSTEM/HISTORY/TOOL/TOTAL + slice(-8) + 会话摘要 |
@@ -118,6 +146,7 @@ const chatSignals    = /怎么看|聊聊|讨论|主题|叙事|观感|觉得|认�
 | **降级/熔断/超时** | 外部依赖必带超时、重试、fallback;能力降级是业务状态的合法分支 | 90s 超时 + 1 次重试 + 四级降级 + `meta.degraded` |
 | **Prompt 注入防护观念** | **工具返回的内容是数据不是指令**;模型要"看"用户数据,执行权在代码 | 工具结果只作上下文回灌、不驱动控制流(recommend 前有 grounded 校验) |
 | **在线反馈 vs 离线训练** | 反馈闭环无需重训:最近 N 条注入 prompt 即可实现"下一轮调节" | getRecentFeedback(12 条)→ buildFeedbackHint → system prompt |
+| **模型选型/评估** | 权衡任务能力+成本+延迟+部署形态;换模型用可观测 trace 回归对比,不靠嘴 | qwen7B→GLM-4.7:fallback/JSON 非法率/收敛轮数对比(Q11) |
 | **确定性与可观测** | 每一步留痕(工具名/参数/耗时/ok/降级)才能调试与 eval | `trace` 事件 + agentTrace + Timeline UI |
 
 ---
@@ -145,16 +174,18 @@ const chatSignals    = /怎么看|聊聊|讨论|主题|叙事|观感|觉得|认�
 | 反馈只 prompt 层、无长期学习 | 讲清边界:即时调节 vs 持久模型;大规模升级路径已备 |
 | 90s LLM 超时偏长 | 与真实交互可用性权衡;可做分级超时(工具 5s / 生成 30s) |
 | 长会话摘要受限于 120 字 | 覆盖有限;替代:结构化记忆(用户口味画像独立存) |
+| 模型层依赖单一厂商(GLM 云) | 模型无关架构已保证可切换;换模型用 agentTrace 回归(fallback/JSON 非法率/收敛轮数),不锁死 |
 
 ---
 
 ## 彩排建议
 
-1. **三个必须背透**:Q1(白名单 + plan 双守卫 = 可控性)、Q4(prompt 预算 = 小模型上下文管理)、Q6(四级降级 = LLM 不可靠组件下的默认路径)。
+1. **四个必须背透**:Q1(白名单 + plan 双守卫 = 可控性)、Q4(prompt 预算 = 模型无关的上下文/成本管理)、Q6(四级降级 = LLM 不可靠组件下的默认路径)、Q11(模型选型 = qwen7B→GLM-4.7 迁移故事)。
 2. 30 秒版:白名单约束 + plan-first + 最多 6 步 → 正则分流换行为 → SSE 推工具轨迹、token 流式 → 预算裁剪 → 四级降级兜底本地片单。
 3. 与③ Hybrid 串讲:**同一条 `movieUpsert` 幂等写库管道被 Hybrid 与 Agent 共用**(`resolveLocalMovieIdsForCandidates` / `upsert_and_map_local`),但 Agent 的 TMDB 客户端没走代理——"复用管道 + 识别一致性债"是高级工程感。
 4. 被问"是不是 RAG"→ 明确:非检索增强的推荐器(简历已标注),是**受控工具调用 + 计划约束 + 降级链**,推荐来自工具(本地库/TMDB)而非向量相似度。
 5. 被问"为什么不用向量检索"→ 谈权衡:语义检索对"荐片"收益有限(推荐质量瓶颈在候选召回与口味建模),RTR 可作后续演进方向——但别吹,简历明确不写 RAG/微调。
+6. **模型选型故事线**(被问概率高,Q11):qwen7B 短板(工具遵循不稳/JSON 偶发非法/多步跟不牢)→ 切 GLM-4.7 云 → 网络依赖让降级链成为默认路径 → 架构模型无关。被问"怎么选模型"按这条 + Q11 评估维度答。
 
 ---
 
@@ -164,4 +195,5 @@ const chatSignals    = /怎么看|聊聊|讨论|主题|叙事|观感|觉得|认�
 - DONE 事件由**路由**在 finalize 后发送,agentRuntime 内部 `done` 不映射,**防双发**;
 - 降级是**200/正常响应里打 `meta.degraded=true`**,不是错误页;文案明确告知用户"AI 暂不可用,已换本地片库";
 - AI 的 TMDB 客户端是**内联全局 fetch、无代理**(对比 hybrid 的 undici ProxyAgent)——不是同一份;
-- 会话存 **MySQL**(不是内存),多轮输入取**最近 8 条**;反馈影响下轮靠 **prompt 注入**,不是微调。
+- 会话存 **MySQL**(不是内存),多轮输入取**最近 8 条**;反馈影响下轮靠 **prompt 注入**,不是微调;
+- 模型主线:**默认 qwen2.5:7b(Ollama 本地)→ 线上 GLM-4.7(env 覆盖)**;说"模型无关架构"而非"我只会用某个模型";预算优化不是"只因为小模型",是成本与质量的通用策略。

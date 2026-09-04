@@ -3,11 +3,14 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import styles from '@/CSS/MovieSwipe.module.css'
 import { useGetMoviesQuery } from '@/store/API/MovieApi'
-import { HeartOutlined, HeartFilled, MessageOutlined } from '@ant-design/icons'
+import { HeartOutlined, HeartFilled, MessageOutlined, SoundOutlined, PauseOutlined } from '@ant-design/icons'
 import { useSelector } from 'react-redux'
 import { Modal, Input, Button, List, Avatar, Typography, Spin } from 'antd'
-import { useAddFavoriteMutation, useDelFavoriteMutation, useGetFavoriteQuery } from '@/store/API/favoriteApi'
+import { useAddFavoriteMutation, useDelFavoriteMutation } from '@/store/API/favoriteApi'
 import { useGetReviewQuery, useAddReviewMutation } from '@/store/API/reviewApi'
+import { speakText, stopSpeaking, isSpeechSupported } from '@/utils/speakText'
+import { confirmDanger } from '@/utils/confirmDialog'
+import { useFavorites } from '@/hooks/useFavorites'
 
 const { Text, Paragraph } = Typography
 const SWIPE_PAGE_SIZE = 10
@@ -28,6 +31,7 @@ const MovieSwipe = () => {
   const [showComments, setShowComments] = useState(false)
   const [commentContent, setCommentContent] = useState('')
   const [currentMovie, setCurrentMovie] = useState(null)
+  const [speaking, setSpeaking] = useState(false)
   const mergingRef = useRef(false)
 
   const { data, isLoading, isFetching } = useGetMoviesQuery({
@@ -39,11 +43,15 @@ const MovieSwipe = () => {
 
   const auth = useSelector((state) => state.auth)
 
-  const { data: favorites } = useGetFavoriteQuery(undefined, { skip: !auth.isLogin })
+  const { favorites } = useFavorites()
   const [addFavorite] = useAddFavoriteMutation()
   const [delFavorite] = useDelFavoriteMutation()
 
-  const { data: reviews, refetch } = useGetReviewQuery()
+  // 评论按当前打开的电影筛选，由服务端过滤关键字
+  const { data: reviews } = useGetReviewQuery(
+    { movieId: currentMovie?.documentId },
+    { skip: !currentMovie }
+  )
   const [addReview] = useAddReviewMutation()
 
   useEffect(() => {
@@ -63,6 +71,15 @@ const MovieSwipe = () => {
     mergingRef.current = true
     setFetchPage((p) => p + 1)
   }, [fetchPage, totalPages, isFetching])
+
+  useEffect(() => {
+    stopSpeaking()
+    setSpeaking(false)
+  }, [currentIndex])
+
+  useEffect(() => {
+    return () => stopSpeaking()
+  }, [])
 
   useEffect(() => {
     if (!isFetching) mergingRef.current = false
@@ -117,35 +134,11 @@ const MovieSwipe = () => {
     return <div style={{ padding: 50, textAlign: 'center' }}>暂无电影数据</div>
   }
 
-  const isFavorited = (movieId) => {
-    const movieIdNum = Number(movieId)
-    if (Array.isArray(favorites)) {
-      return favorites.some(
-        (fav) => Number(fav.movieId) === movieIdNum && fav.username === auth.userInfo?.username
-      )
-    }
-    if (favorites && Array.isArray(favorites.data)) {
-      return favorites.data.some(
-        (fav) => Number(fav.movieId) === movieIdNum && fav.username === auth.userInfo?.username
-      )
-    }
-    return false
-  }
+  const isFavorited = (movieId) =>
+    favorites.some((fav) => Number(fav.movieId) === Number(movieId))
 
-  const getFavoriteItem = (movieId) => {
-    const movieIdNum = Number(movieId)
-    if (Array.isArray(favorites)) {
-      return favorites.find(
-        (fav) => Number(fav.movieId) === movieIdNum && fav.username === auth.userInfo?.username
-      )
-    }
-    if (favorites && Array.isArray(favorites.data)) {
-      return favorites.data.find(
-        (fav) => Number(fav.movieId) === movieIdNum && fav.username === auth.userInfo?.username
-      )
-    }
-    return null
-  }
+  const getFavoriteItem = (movieId) =>
+    favorites.find((fav) => Number(fav.movieId) === Number(movieId)) || null
 
   const handleFavorite = async (movie) => {
     if (!auth.isLogin) {
@@ -155,14 +148,18 @@ const MovieSwipe = () => {
     try {
       const favoriteItem = getFavoriteItem(movie.documentId)
       if (favoriteItem) {
+        await confirmDanger({
+          title: '取消收藏？',
+          content: `确定将《${movie.title}》从收藏中移除吗？`,
+        })
         await delFavorite(favoriteItem.id || favoriteItem.documentId)
       } else {
         await addFavorite({
           movieId: Number(movie.documentId),
-          username: auth.userInfo?.username,
         })
       }
     } catch (error) {
+      if (error?.message === 'cancelled') return
       console.error('收藏操作失败:', error)
       alert('收藏操作失败，请重试')
     }
@@ -185,30 +182,39 @@ const MovieSwipe = () => {
     }
     try {
       await addReview({
-        data: {
-          movieId: Number(currentMovie.documentId),
-          content: commentContent,
-          rating: 5,
-          date: new Date().toISOString(),
-        },
+        movieId: Number(currentMovie.documentId),
+        content: commentContent,
+        rating: 5,
       })
       setCommentContent('')
-      refetch()
     } catch (error) {
       console.error('添加评论失败:', error)
       alert('添加评论失败，请重试')
     }
   }
 
-  const getMovieReviews = (movieId) => {
-    const movieIdNum = Number(movieId)
-    if (Array.isArray(reviews)) {
-      return reviews.filter((review) => Number(review.movieId) === movieIdNum)
+  const getMovieReviews = () => (reviews?.data || [])
+
+  const handleToggleSpeak = async (movie) => {
+    if (!isSpeechSupported()) {
+      alert('当前浏览器不支持语音播报')
+      return
     }
-    if (reviews && Array.isArray(reviews.data)) {
-      return reviews.data.filter((review) => Number(review.movieId) === movieIdNum)
+    if (speaking) {
+      stopSpeaking()
+      setSpeaking(false)
+      return
     }
-    return []
+    const text = `${movie.title}。${movie.summary || '暂无简介'}`
+    try {
+      setSpeaking(true)
+      await speakText(text)
+    } catch (e) {
+      console.error(e)
+      alert('播报失败')
+    } finally {
+      setSpeaking(false)
+    }
   }
 
   return (
@@ -259,6 +265,16 @@ const MovieSwipe = () => {
                 </span>
                 <span
                   className={styles['icon-item']}
+                  onClick={() => handleToggleSpeak(movie)}
+                  style={{ cursor: 'pointer' }}
+                  role="button"
+                  tabIndex={0}
+                  title={speaking ? '停止播报' : '播报简介'}
+                >
+                  {speaking && idx === currentIndex ? <PauseOutlined /> : <SoundOutlined />}
+                </span>
+                <span
+                  className={styles['icon-item']}
                   onClick={() => handleShowComments(movie)}
                   style={{ cursor: 'pointer' }}
                   role="button"
@@ -291,7 +307,7 @@ const MovieSwipe = () => {
       >
         <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '20px' }}>
           <List
-            dataSource={getMovieReviews(currentMovie?.documentId)}
+            dataSource={getMovieReviews()}
             renderItem={(review) => (
               <List.Item>
                 <List.Item.Meta

@@ -1,27 +1,20 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi } from '@reduxjs/toolkit/query/react'
+import { createBaseQueryWithReauth } from './baseQueryWithReauth'
+import { API_BASE } from './apiBase'
 
 const favoriteApi = createApi({
   reducerPath: 'favoriteApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:1337/api',
-    prepareHeaders: (headers, { getState }) => {
-      const token = getState().auth.token;
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
-      }
-      return headers;
-    },
-  }),
+  baseQuery: createBaseQueryWithReauth(API_BASE),
   endpoints: (builder) => ({
     getFavorite: builder.query({
       query: () => 'favorites',
       providesTags: ['Favorite'],
     }),
     addFavorite: builder.mutation({
-      query: ({ movieId, username }) => ({
+      query: ({ movieId }) => ({
         url: 'favorites',
         method: 'POST',
-        body: { data: { movieId, username } },
+        body: { movieId },
       }),
       invalidatesTags: ['Favorite'],
     }),

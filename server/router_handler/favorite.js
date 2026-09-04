@@ -1,12 +1,19 @@
 const db = require('../db/index.js')
 const { addFavorite_schema } = require('../schema/favorite.js')
 
-// 获取收藏列表
+// 获取收藏列表(已联表返回电影信息,前端无需再拉整表 join)
 // GET /api/favorites
 exports.getFavorites = async (req, res) => {
   const username = req.user.username//从token中获取用户名
   try {
-    const sql = 'select * from favorites where username=? order by id'
+    const sql = `
+      SELECT f.id, f.movieId, f.username,
+             m.title, m.poster, m.rating, m.year, m.genre, m.duration,
+             m.director, m.actors, m.summary
+      FROM favorites f
+      JOIN movies m ON m.id = f.movieId
+      WHERE f.username = ?
+      ORDER BY f.id`
     const [result] = await db.query(sql, [username])
     const data = result.map(fav => ({
       ...fav, documentId: fav.id
@@ -20,19 +27,13 @@ exports.getFavorites = async (req, res) => {
 // 添加收藏
 // POST /api/favorites
 exports.addFavorite = async (req, res) => {
-  const { data } = req.body
-  if (!data) {
-    return res.cc('缺少data字段')
-  }
-  const { error } = addFavorite_schema.validate(data)
+  // 请求体: { movieId }(裸 body);username 一律取登录态
+  const { error } = addFavorite_schema.validate(req.body)
   if (error) {
     return res.cc(error.details[0].message)
   }
-  const { movieId, username } = data
-  // 验证当前用户与username是否一致
-  if (username !== req.user.username) {
-    return res.cc('用户身份认证失败!')
-  }
+  const { movieId } = req.body
+  const username = req.user.username
   try {
     // 检查电影是否存在
     const sql = 'select id from movies where id =?'

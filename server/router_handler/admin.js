@@ -1,0 +1,198 @@
+const db = require('../db/index.js')
+const { hasPermission, isStaff, ALL_ROLES } = require('../utils/roles.js')
+
+let auditTableReady = false
+
+async function ensureAuditTable() {
+  if (auditTableReady) return true
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS admin_audit_log (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        admin_username VARCHAR(15) NOT NULL,
+        action VARCHAR(64) NOT NULL,
+        target_type VARCHAR(32) NULL,
+        target_id VARCHAR(64) NULL,
+        detail JSON NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_audit_admin (admin_username, created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `)
+    auditTableReady = true
+    return true
+  } catch (err) {
+    console.error('ensureAuditTable failed:', err.message)
+    return false
+  }
+}
+
+async function writeAudit(adminUsername, action, targetType, targetId, detail) {
+  try {
+    const ready = await ensureAuditTable()
+    if (!ready) {
+      console.error('writeAudit skipped: admin_audit_log unavailable')
+      return
+    }
+    await db.query(
+      `INSERT INTO admin_audit_log (admin_username, action, target_type, target_id, detail)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        adminUsername,
+        action,
+        targetType || null,
+        targetId != null ? String(targetId) : null,
+        detail ? JSON.stringify(detail) : null,
+      ]
+    )
+  } catch (err) {
+    console.error('writeAudit failed:', err.message)
+  }
+}
+
+exports.getAdminMe = async (req, res) => {
+  res.json({ success: true, admin: req.adminUser })
+}
+
+exports.listUsers = async (req, res) => {
+  if (!hasPermission(req.adminUser.role, 'users.manage')) {
+    return res.cc('无权限', 403)
+  }
+  try {
+    const [rows] = await db.query(
+      `SELECT id, username, email, status, role, email_verified, created_at
+       FROM users ORDER BY id DESC LIMIT 200`
+    )
+    res.json({ success: true, users: rows })
+  } catch (err) {
+    res.status(500).json({ error: { message: '获取用户列表失败' } })
+  }
+}
+
+exports.updateUserStatus = async (req, res) => {
+  if (!hasPermission(req.adminUser.role, 'users.manage')) {
+    return res.cc('无权限', 403)
+  }
+  const userId = Number(req.params.id)
+  const status = req.body?.status
+  if (!userId || !['active', 'locked', 'banned'].includes(status)) {
+    return res.cc('参数无效', 400)
+  }
+  try {
+    const [rows] = await db.query('SELECT username, role FROM users WHERE id = ?', [userId])
+    const target = rows[0]
+    if (!target) return res.cc('用户不存在', 404)
+    if (target.username === req.adminUser.username) {
+      return res.cc('不能修改自己的账号状态', 400)
+    }
+    if (req.adminUser.role === 'operator' && isStaff(target.role)) {
+      return res.cc('运营不能修改后台账号状态', 403)
+    }
+    if (target.role === 'admin' && status !== 'active') {
+      const [adminRows] = await db.query(
+        "SELECT COUNT(*) AS c FROM users WHERE role = 'admin' AND status = 'active'"
+      )
+      if (Number(adminRows[0]?.c || 0) <= 1) {
+        return res.cc('不能封禁或锁定最后一个管理员', 400)
+      }
+    }
+    await db.query('UPDATE users SET status = ? WHERE id = ?', [status, userId])
+    await writeAudit(req.adminUser.username, 'user.status', 'user', userId, {
+      status,
+      targetUsername: target.username,
+    })
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: { message: '更新用户状态失败' } })
+  }
+}
+
+exports.updateUserRole = async (req, res) => {
+  if (!hasPermission(req.adminUser.role, 'users.role')) {
+    return res.cc('无权限', 403)
+  }
+  const userId = Number(req.params.id)
+  const role = req.body?.role
+  if (!userId || !ALL_ROLES.includes(role)) {
+    return res.cc('参数无效', 400)
+  }
+  try {
+    const [rows] = await db.query('SELECT username, role FROM users WHERE id = ?', [userId])
+    const target = rows[0]
+    if (!target) return res.cc('用户不存在', 404)
+    if (target.username === req.adminUser.username) {
+      return res.cc('不能修改自己的角色', 400)
+    }
+    if (target.role === 'admin' && role !== 'admin') {
+      const [adminRows] = await db.query(
+        "SELECT COUNT(*) AS c FROM users WHERE role = 'admin' AND status = 'active'"
+      )
+      if (Number(adminRows[0]?.c || 0) <= 1) {
+        return res.cc('不能降级最后一个管理员', 400)
+      }
+    }
+    await db.query('UPDATE users SET role = ? WHERE id = ?', [role, userId])
+    await writeAudit(req.adminUser.username, 'user.role', 'user', userId, {
+      role,
+      previousRole: target.role,
+      targetUsername: target.username,
+    })
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: { message: '更新用户角色失败' } })
+  }
+}
+
+exports.listReviews = async (req, res) => {
+  if (!hasPermission(req.adminUser.role, 'reviews.moderate')) {
+    return res.cc('无权限', 403)
+  }
+  try {
+    const [rows] = await db.query(
+      `SELECT r.id, r.movieId, r.username, r.rating, r.content, r.date, m.title AS movieTitle
+       FROM reviews r
+       LEFT JOIN movies m ON m.id = r.movieId
+       ORDER BY r.date DESC
+       LIMIT 100`
+    )
+    res.json({ success: true, reviews: rows })
+  } catch (err) {
+    res.status(500).json({ error: { message: '获取评论列表失败' } })
+  }
+}
+
+exports.deleteReview = async (req, res) => {
+  if (!hasPermission(req.adminUser.role, 'reviews.moderate')) {
+    return res.cc('无权限', 403)
+  }
+  const reviewId = Number(req.params.id)
+  if (!reviewId) return res.cc('评论 id 无效', 400)
+  try {
+    const [rows] = await db.query('SELECT username, movieId FROM reviews WHERE id = ?', [reviewId])
+    const review = rows[0]
+    if (!review) return res.cc('评论不存在', 404)
+    await db.query('DELETE FROM reviews WHERE id = ?', [reviewId])
+    await writeAudit(req.adminUser.username, 'review.delete', 'review', reviewId, review)
+    res.status(204).send()
+  } catch (err) {
+    res.status(500).json({ error: { message: '删除评论失败' } })
+  }
+}
+
+exports.listAuditLog = async (req, res) => {
+  if (!hasPermission(req.adminUser.role, 'audit.read')) {
+    return res.cc('无权限', 403)
+  }
+  try {
+    const ready = await ensureAuditTable()
+    if (!ready) {
+      return res.status(500).json({ error: { message: '审计表不可用，请检查数据库权限或执行 server/sql/analytics_ops_upgrade.sql' } })
+    }
+    const [rows] = await db.query(
+      `SELECT id, admin_username, action, target_type, target_id, detail, created_at
+       FROM admin_audit_log ORDER BY id DESC LIMIT 100`
+    )
+    res.json({ success: true, logs: rows })
+  } catch (err) {
+    res.status(500).json({ error: { message: '获取审计日志失败' } })
+  }
+}

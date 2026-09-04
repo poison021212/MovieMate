@@ -48,7 +48,8 @@
 - 前端：[`client/src/components/MovieSwipe.jsx`](../../client/src/components/MovieSwipe.jsx)、[`client/src/pages/MovieSwipePage.jsx`](../../client/src/pages/MovieSwipePage.jsx)
 - 样式：[`client/src/CSS/MovieSwipe.module.css`](../../client/src/CSS/MovieSwipe.module.css)
 
-## 8. 后续扩展（未实现）
+## 8. 后续扩展（部分已实现）
 
-- AI 语音播报简介（`speechSynthesis` 或 TTS 服务）；
-- 详情 prefetch（RTK Query `useGetMoviesByIdQuery`）。
+- **已实现**：简介语音播报（浏览器 `speechSynthesis`，见 [`client/src/utils/speakText.js`](../../client/src/utils/speakText.js)）；
+- 详情 prefetch（RTK Query `useGetMoviesByIdQuery`）；
+- 云 TTS 替换 `speakText` 适配层。

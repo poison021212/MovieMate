@@ -1,27 +1,45 @@
-import React from 'react'
 import { useSelector, useDispatch } from 'react-redux'
-import { logout } from '@/store/Slice/authSlice'
+import { logout, loginSuccess } from '@/store/Slice/authSlice'
+import { useRefreshTokenMutation } from '@/store/API/authApi'
 import { useEffect } from 'react'
 
 const useAutoLogout = () => {
-  const auth = useSelector(state => state.auth)
+  const auth = useSelector((state) => state.auth)
   const dispatch = useDispatch()
-  // 创建一个useEffect，用来处理登录状态
+  const [refreshTokenFn] = useRefreshTokenMutation()
+
   useEffect(() => {
-    const timeout = auth.tokenExpireTime - Date.now();
-    // 判断timeout的值
-    if (timeout < 6000) {
-      dispatch(logout());
-      return;
+    if (!auth.isLogin || !auth.tokenExpireTime) return
+
+    const timeout = auth.tokenExpireTime - Date.now()
+
+    if (timeout < 60_000) {
+      refreshTokenFn({})
+        .unwrap()
+        .then((data) => {
+          dispatch(
+            loginSuccess({
+              token: data.accessToken || data.jwt,
+              userInfo: data.user,
+              expiresIn: data.expiresIn,
+            })
+          )
+        })
+        .catch(() => dispatch(logout()))
+      return
     }
+
+    if (timeout < 6000) {
+      dispatch(logout())
+      return
+    }
+
     const timer = setTimeout(() => {
-      dispatch(logout());
-    }, timeout);
-    //  组件卸载时,清除定时器
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [auth]);
+      dispatch(logout())
+    }, timeout)
+
+    return () => clearTimeout(timer)
+  }, [auth, dispatch, refreshTokenFn])
 }
 
 export default useAutoLogout

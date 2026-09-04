@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Row, Col, Input, Pagination, Select, Space, Button, InputNumber } from 'antd'
+import { Row, Col, Input, Pagination, Select, Space, Button, InputNumber, Alert, Collapse, Statistic } from 'antd'
 import MovieCard from './MovieCard'
-import { useGetMoviesQuery } from '@/store/API/MovieApi'
+import { useGetMoviesQuery, useGetHybridSearchStatsQuery } from '@/store/API/MovieApi'
+import { formatQueryError } from '@/utils/formatQueryError'
 
 const { Search } = Input
 
@@ -104,12 +105,21 @@ const MovieList = () => {
     page,
     pageSize,
     q: searchTerm,
+    hybrid: true,
     sortBy,
     sortOrder,
     minRating: minRating ?? undefined,
     year: year || undefined,
     genre: genre || undefined,
   })
+
+  const { data: hybridStats, refetch: refetchHybridStats } = useGetHybridSearchStatsQuery(undefined, {
+    pollingInterval: 30000,
+  })
+
+  useEffect(() => {
+    if (searchTerm) refetchHybridStats()
+  }, [data, searchTerm, refetchHybridStats])
 
   const resetFilters = () => {
     setInputValue('')
@@ -126,9 +136,21 @@ const MovieList = () => {
 
   const movies = data?.items || []
   const pagination = data?.pagination || { page: 1, pageSize: 12, total: 0, totalPages: 0 }
+  const meta = data?.meta || null
+  const aggregate = meta?.aggregate || hybridStats?.rates
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: 60 }}>加载中...</div>
-  if (isError) return <div style={{ color: 'red' }}>错误: {error?.status || '请求失败'}</div>
+  if (isError) {
+    return (
+      <Alert
+        type="error"
+        showIcon
+        message="电影列表加载失败"
+        description={formatQueryError(error)}
+        style={{ margin: 24 }}
+      />
+    )
+  }
 
   return (
     <div style={{ padding: 24 }}>
@@ -214,8 +236,99 @@ const MovieList = () => {
         ))}
       </Row>
 
+      {meta?.hybrid && searchTerm && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginTop: 16 }}
+          message={`本次来源：${meta.source}${
+            meta.fallbackTriggered
+              ? `（本地先命中 ${meta.localCountBeforeFallback ?? 0} 条；TMDB 回退：抓取 ${meta.tmdbFetched} 条，写回 ${meta.tmdbPersisted} 条）`
+              : `（本地命中 ${meta.localCountBeforeFallback ?? 0} 条，未触发回退）`
+          }${
+            aggregate
+              ? ` | 累计：本地有结果 ${aggregate.localHasResultsRatePercent ?? 0}% ，未触发回退 ${aggregate.localOnlyRatePercent ?? aggregate.localHitRatePercent ?? 0}% ，回退触发 ${aggregate.fallbackTriggerRatePercent}%`
+              : ''
+          }`}
+        />
+      )}
+
+      {meta?.fallbackError && searchTerm && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginTop: 16 }}
+          message={
+            meta.fallbackErrorReason === 'missing_token'
+              ? 'TMDB 回退不可用：请在后端 server/.env 配置 TMDB_ACCESS_TOKEN'
+              : `TMDB 回退失败（${meta.fallbackErrorReason || 'network_error'}），请检查网络或配置 HTTPS_PROXY / HTTP_PROXY`
+          }
+        />
+      )}
+
+      {hybridStats && searchTerm && (
+        <Collapse
+          style={{ marginTop: 12 }}
+          items={[
+            {
+              key: 'hybrid-stats',
+              label: 'Hybrid 搜索观测（服务端进程内累计，重启清零）',
+              children: (
+                <Row gutter={[16, 16]}>
+                  <Col xs={12} sm={8}>
+                    <Statistic title="关键词请求数" value={hybridStats.hybridKeywordRequests} />
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <Statistic
+                      title="本地有结果率"
+                      value={hybridStats.rates?.localHasResultsRatePercent ?? 0}
+                      suffix="%"
+                    />
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <Statistic
+                      title="未触发回退率"
+                      value={
+                        hybridStats.rates?.localOnlyRatePercent ??
+                        hybridStats.rates?.localHitRatePercent ??
+                        0
+                      }
+                      suffix="%"
+                    />
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <Statistic
+                      title="回退触发率"
+                      value={hybridStats.rates?.fallbackTriggerRatePercent ?? 0}
+                      suffix="%"
+                    />
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <Statistic title="TMDB 抓取累计" value={hybridStats.tmdbFetchedTotal} />
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <Statistic title="本地写回累计" value={hybridStats.tmdbPersistedTotal} />
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <Statistic
+                      title="写回有效率"
+                      value={hybridStats.rates?.persistEfficiencyPercent ?? 0}
+                      suffix="%"
+                    />
+                  </Col>
+                </Row>
+              ),
+            },
+          ]}
+        />
+      )}
+
       {movies.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 40 }}>未找到相关电影</div>
+        <div style={{ textAlign: 'center', padding: 40 }}>
+          {meta?.fallbackError && searchTerm
+            ? '本地未命中，且 TMDB 回退未能补充结果'
+            : '未找到相关电影'}
+        </div>
       )}
 
       <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}>

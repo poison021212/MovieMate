@@ -1,11 +1,22 @@
 const db = require('../db/index.js')
-const { addReview_schema } = require('../schema/review.js')
+const { addReview_schema, addReply_schema } = require('../schema/review.js')
 
-// 获取所有评论
+// 获取评论列表(支持 ?movieId=&username= 筛选)
 exports.getReviews = async (req, res) => {
   try {
-    const sql = 'select * from reviews order by id'
-    const [result] = await db.query(sql)
+    const { movieId, username } = req.query
+    const conditions = []
+    const params = []
+    if (movieId !== undefined && movieId !== '' && !Number.isNaN(Number(movieId))) {
+      conditions.push('movieId = ?')
+      params.push(Number(movieId))
+    }
+    if (username) {
+      conditions.push('username = ?')
+      params.push(username)
+    }
+    const whereSql = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : ''
+    const [result] = await db.query(`select * from reviews${whereSql} order by id`, params)
     // 转换为 Strapi 格式：每个对象添加 documentId
     const data = result.map(review => ({
       ...review, documentId: review.id,
@@ -13,9 +24,6 @@ exports.getReviews = async (req, res) => {
       // 例如：2023-10-10 14:30:00
       date: review.date ? new Date(review.date).toLocaleString('zh-CN', { hour12: false }) : null
     }))
-    if (data.length === 0) {
-      res.success('暂无评论')
-    }
     res.success({ data })
   } catch (err) {
     res.cc('获取评论失败', 500)
@@ -24,18 +32,13 @@ exports.getReviews = async (req, res) => {
 
 // 添加评论
 exports.addReviews = async (req, res) => {
-  // 前端请求体结构: { data: { movieId, username, date, rating, content } }
-  const { data } = req.body
-  if (!data) {
-    return res.cc('缺少data字段')
-  }
-  // 验证请求体数据是否符合要求
-  const { error } = addReview_schema.validate(data)
+  // 请求体: { movieId, rating, content }(裸 body)
+  const { error } = addReview_schema.validate(req.body)
   if (error) {
     return res.cc(error.details[0].message)
   }
   // date拿走，由后端自动生成
-  const { movieId, rating, content } = data
+  const { movieId, rating, content } = req.body
   const username = req.user.username
   try {
     const sql = 'select id from movies where id=?'
@@ -69,7 +72,7 @@ exports.addReviews = async (req, res) => {
 exports.deleteReviews = async (req, res) => {
   const { id } = req.params
   if (!id || isNaN(id)) {
-    res.cc('评论id参数错误')
+    return res.cc('评论id参数错误')
   }
   const username = req.user.username
   try {
@@ -92,5 +95,80 @@ exports.deleteReviews = async (req, res) => {
     // res.success({ message: '删除成功' })
   } catch (err) {
     res.cc('删除评论失败', 500)
+  }
+}
+
+exports.getReviewReplies = async (req, res) => {
+  const reviewId = Number(req.params.id)
+  if (!reviewId) return res.cc('评论 id 无效', 400)
+  try {
+    const [reviewCheck] = await db.query('SELECT id FROM reviews WHERE id = ?', [reviewId])
+    if (!reviewCheck.length) return res.cc('评论不存在', 404)
+    const [rows] = await db.query(
+      'SELECT id, review_id, username, content, date FROM review_replies WHERE review_id = ? ORDER BY id ASC',
+      [reviewId]
+    )
+    const data = rows.map((row) => ({
+      ...row,
+      documentId: row.id,
+      date: row.date ? new Date(row.date).toLocaleString('zh-CN', { hour12: false }) : null,
+    }))
+    res.success({ data })
+  } catch (err) {
+    if (err.code === 'ER_NO_SUCH_TABLE') {
+      return res.cc('缺少 review_replies 表，请执行 server/sql/ai_chat_and_replies.sql', 503)
+    }
+    console.error('getReviewReplies', err)
+    res.cc('获取回复失败', 500)
+  }
+}
+
+exports.addReviewReply = async (req, res) => {
+  const reviewId = Number(req.params.id)
+  if (!reviewId) return res.cc('评论 id 无效', 400)
+  const { error } = addReply_schema.validate(req.body || {})
+  if (error) return res.cc(error.details[0].message, 400)
+  const username = req.user.username
+  const { content } = req.body
+  try {
+    const [reviewCheck] = await db.query('SELECT id FROM reviews WHERE id = ?', [reviewId])
+    if (!reviewCheck.length) return res.cc('评论不存在', 404)
+    const [result] = await db.query(
+      'INSERT INTO review_replies (review_id, username, content, date) VALUES (?, ?, ?, NOW())',
+      [reviewId, username, content]
+    )
+    res.success(
+      {
+        message: '回复成功',
+        data: {
+          id: result.insertId,
+          documentId: result.insertId,
+          review_id: reviewId,
+          username,
+          content,
+          date: new Date().toISOString(),
+        },
+      },
+      201
+    )
+  } catch (err) {
+    res.cc('回复失败', 500)
+  }
+}
+
+exports.deleteReply = async (req, res) => {
+  const replyId = Number(req.params.replyId)
+  if (!replyId) return res.cc('回复 id 无效', 400)
+  const username = req.user.username
+  try {
+    const [check] = await db.query(
+      'SELECT id FROM review_replies WHERE id = ? AND username = ?',
+      [replyId, username]
+    )
+    if (!check.length) return res.cc('回复不存在或无权删除', 404)
+    await db.query('DELETE FROM review_replies WHERE id = ? AND username = ?', [replyId, username])
+    res.status(204).send()
+  } catch (err) {
+    res.cc('删除回复失败', 500)
   }
 }

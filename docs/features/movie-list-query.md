@@ -2,7 +2,7 @@
 
 - 状态：已实现
 - 负责人：MovieMate 维护者
-- 最后核对日期：2026-08-03
+- 最后核对日期：2026-08-25
 
 ## 1. 目标
 
@@ -34,7 +34,8 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 
 | 场景 | Method + Path | 关键请求 | 关键响应 | 限制 |
 | --- | --- | --- | --- | --- |
-| 分页列表 | `GET /api/movies` | 见下表 query | `{ message, data[], pagination }` | `page/pageSize >= 1` |
+| 分页列表 | `GET /api/movies` | 见下表 query | `{ message, data[], pagination, meta }` | `page/pageSize >= 1` |
+| Hybrid 统计 | `GET /api/movies/hybrid-stats` | 无 | `{ message, data: 累计指标 }` | 进程内累计 + MySQL 事件持久化 |
 | 电影详情 | `GET /api/movies/:id` | 路径 `id` 为本地主键 | `{ message, data: movie }` | `id` 须为数字 |
 
 ### Query 参数（列表）
@@ -44,13 +45,33 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 | `page` | 页码 | 1 |
 | `pageSize` | 每页条数 | 12 |
 | `q` | 片名 / 导演 / 演员模糊匹配 | 无 |
+| `hybrid` | `1` 时启用本地优先 + TMDB fallback（仅第 1 页且本地结果不足时） | 0 |
 | `sortBy` | `id` / `rating` / `year` / `title` / `release_date` / `popularity` / `vote_count` | `id` |
 | `sortOrder` | `asc` / `desc` | `asc` |
 | `minRating` | 评分下限 | 无 |
 | `year` | 与 `movies.year` 精确匹配 | 无 |
 | `genre` | 与 `movies.genre` 精确匹配 | 无 |
 
-列表项含 `documentId`（等于 `id`），兼容历史 Strapi 形态。前端 `transformResponse` 返回 `{ items, pagination }`。
+列表项含 `documentId`（等于 `id`），兼容历史 Strapi 形态。前端 `transformResponse` 返回 `{ items, pagination, meta }`。
+
+当 `hybrid=1` 且第一页关键词搜索结果少于阈值（默认 5 条）时，后端会尝试 TMDB 并写回 `movies`，再按**持久化后的本地 id** 与本地 LIKE 结果合并返回（不再仅依赖二次 LIKE，避免中文片名与英文关键词不匹配导致空列表）。`meta` 含 `source`、`fallbackTriggered`、`fallbackError`、`fallbackErrorReason`、`localCountBeforeFallback`、`tmdbFetched`、`tmdbPersisted`、`aggregate`。
+
+累计比率（`aggregate` / `hybrid-stats`）：
+
+| 字段 | 含义 |
+| --- | --- |
+| `localHasResultsRatePercent` | 回退前本地至少命中 1 条的关键词请求占比 |
+| `localOnlyRatePercent` | 本地结果已够、**未触发** TMDB 回退的占比（旧名 `localHitRatePercent` 同义） |
+| `fallbackTriggerRatePercent` | 触发过 TMDB 回退的占比 |
+| `persistEfficiencyPercent` | TMDB 抓取条目中被写回本地的比例 |
+
+### 观测接口
+
+`GET /api/movies/hybrid-stats` 返回自进程启动以来的累计计数与比率，用于观察本地命中率与 TMDB fallback 成本。每次 Hybrid 关键词请求还会写入 MySQL 表 `hybrid_search_events`（见 [`server/utils/hybridSearchMetrics.js`](../../server/utils/hybridSearchMetrics.js)）；仪表盘 `GET /api/analytics/overview` 可读取持久化快照。
+
+**前端展示**：仅在用户输入关键词（`searchTerm` 非空）时显示「本次来源」提示与 Hybrid 观测折叠面板；点击「重置筛选」清空关键词后隐藏，避免将服务端累计值误读为当前列表状态。进程内累计计数不随重置清零（重启后端进程清零）；MySQL 事件表保留历史记录。
+
+**关键词请求数口径**：`hybridKeywordRequests` 统计的是满足 `hybrid=1` 且带 `q` 的 `GET /api/movies` **HTTP 请求次数**，不是「点击搜索按钮」次数。同一关键词下改排序/筛选/分页、刷新页面等会再次请求并各计 1 次；单次请求内部的 TMDB 回写与二次查本地不会额外 +1。
 
 ### URL 同步（前端）
 
@@ -75,11 +96,12 @@ MySQL movies 表 -> GET /api/movies -> RTK Query -> MovieList -> MovieCard
 - [ ] 翻页、改 `pageSize` 行为正确；
 - [ ] 搜索 + 筛选 + 排序组合有效；
 - [ ] URL 刷新后条件保留；
-- [ ] 重置后 URL 与列表恢复默认。
+- [ ] 重置后 URL 与列表恢复默认；
+- [ ] 重置后无关键词时不展示 Hybrid 来源提示与观测面板；有关键词时再展示。
 
 ## 8. 实现位置
 
-- 后端：[`server/router_handler/movie.js`](../../server/router_handler/movie.js)、[`server/router/movie.js`](../../server/router/movie.js)
+- 后端：[`server/router_handler/movie.js`](../../server/router_handler/movie.js)、[`server/utils/tmdbClient.js`](../../server/utils/tmdbClient.js)、[`server/router/movie.js`](../../server/router/movie.js)
 - 前端 API：[`client/src/store/API/MovieApi.jsx`](../../client/src/store/API/MovieApi.jsx)
 - 前端页面：[`client/src/components/MovieList.jsx`](../../client/src/components/MovieList.jsx)、[`client/src/components/MovieCard.jsx`](../../client/src/components/MovieCard.jsx)
 - Hook：[`client/src/hooks/useMovieItems.jsx`](../../client/src/hooks/useMovieItems.jsx)

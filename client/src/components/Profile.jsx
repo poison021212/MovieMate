@@ -1,53 +1,39 @@
-import { Row, Col, Card, Button, Empty } from 'antd';
+import { Row, Col, Card, Button, Empty, message } from 'antd';
+import { confirmDanger } from '@/utils/confirmDialog';
 import { HeartFilled } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
-import useMovieItems from '@/hooks/useMovieItems';
-import { useGetFavoriteQuery, useDelFavoriteMutation } from '@/store/API/favoriteApi';
-import { useSelector } from 'react-redux';
+import { useDelFavoriteMutation } from '@/store/API/favoriteApi';
+import { useFavorites } from '@/hooks/useFavorites';
 
 const { Meta } = Card;
 
 function Profile() {
-  const { items: moviesArray, isLoading: moviesLoading } = useMovieItems({
-    page: 1,
-    pageSize: 200,
-  });
-  const { data: favorite, refetch } = useGetFavoriteQuery();
+  // 收藏列表已由后端联表返回电影信息(title/poster/rating/...)，无需再拉整表 join
+  const { favorites: favoriteArray, isLoading } = useFavorites();
   const [delFavorite] = useDelFavoriteMutation();
-  const auth = useSelector(state => state.auth);
 
-  // 从所有电影中筛选出收藏的电影
-  // console.log('收藏数据:', favorite);
-  // console.log('电影数据:', movies);
-  // console.log('当前用户:', auth.userInfo);
-  // 筛选当前用户的收藏
-  const favoriteArray = Array.isArray(favorite?.data) ? favorite.data.filter(item => item.username === auth.userInfo?.username) : [];
-  // 处理 movies 是数组的情况（因为 MovieApi 的 transformResponse 直接返回了数组）
-  // console.log('收藏数组:', favoriteArray);
-  // console.log('电影数组:', moviesArray);
-  const favoriteMovies = moviesArray.filter(movie =>
-    favoriteArray.some(favoriteItem => favoriteItem.movieId === movie.documentId)
-  );
-  // console.log('已收藏', favoriteMovies)
-  const handleRemove = async (movieId) => {
-    // 找到对应的收藏记录
+  const handleRemove = async (movieId, movieTitle) => {
     const favoriteItem = favoriteArray.find(item => item.movieId === movieId);
-    if (favoriteItem) {
-      try {
-        await delFavorite(favoriteItem.documentId).unwrap();
-        // 删除成功后，刷新收藏列表
-        refetch();
-      } catch (error) {
-        console.error('删除收藏失败:', error);
-      }
+    if (!favoriteItem) return;
+    try {
+      await confirmDanger({
+        title: '取消收藏？',
+        content: movieTitle ? `确定将《${movieTitle}》从收藏中移除吗？` : '确定取消收藏这部电影吗？',
+      });
+      await delFavorite(favoriteItem.documentId).unwrap();
+      message.success('已取消收藏');
+    } catch (error) {
+      if (error?.message === 'cancelled') return;
+      console.error('删除收藏失败:', error);
+      message.error('取消收藏失败');
     }
   };
 
-  if (moviesLoading) {
+  if (isLoading) {
     return <div style={{ padding: 50, textAlign: 'center' }}>加载中...</div>
   }
 
-  if (favoriteMovies.length === 0) {
+  if (favoriteArray.length === 0) {
     return (
       <div style={{ padding: 50, textAlign: 'center' }}>
         <Empty description="暂无收藏电影" />
@@ -62,7 +48,7 @@ function Profile() {
     <div style={{ padding: 24 }}>
       <h1 style={{ marginBottom: 24 }}>我的收藏</h1>
       <Row gutter={[16, 16]}>
-        {favoriteMovies.map(movie => (
+        {favoriteArray.map(movie => (
           <Col key={movie.documentId} xs={24} sm={12} md={8} lg={6}>
             <Card
               hoverable
@@ -84,7 +70,7 @@ function Profile() {
                   type="text"
                   danger
                   icon={<HeartFilled />}
-                  onClick={() => handleRemove(movie.documentId)}
+                  onClick={() => handleRemove(movie.documentId, movie.title)}
                 >
                   取消收藏
                 </Button>

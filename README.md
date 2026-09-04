@@ -13,9 +13,12 @@
 | [movie-detail-favorite.md](docs/features/movie-detail-favorite.md) | 详情与收藏 |
 | [review-flow.md](docs/features/review-flow.md) | 影评 |
 | [swipe-mode.md](docs/features/swipe-mode.md) | 速览模式 |
-| [ai-recommendation.md](docs/features/ai-recommendation.md) | AI 推荐 |
+| [ai-recommendation.md](docs/features/ai-recommendation.md) | AI 推荐（Tool-calling Agent + 多轮会话） |
+| [analytics-dashboard.md](docs/features/analytics-dashboard.md) | 数据洞察仪表盘（日快照 + AI 预测；`userCount` 仅 staff 可见） |
+| [ops-console.md](docs/features/ops-console.md) | 运营控制台（预设角色 moderator/operator/admin、角色管理、审计） |
 | [tmdb-sync.md](docs/features/tmdb-sync.md) | TMDB 同步脚本 |
 | [runtime-and-config.md](docs/features/runtime-and-config.md) | 环境与启动 |
+| [preview-change-summary-2026-08-04.md](docs/features/preview-change-summary-2026-08-04.md) | **本轮改动汇总与 Preview 指南** |
 
 ## 目录结构
 
@@ -34,7 +37,7 @@ MovieMate-master/
 
 - **Node.js** 20 LTS（推荐；避免使用过新的未验证版本）
 - **MySQL** 8.x（或 5.7+）
-- （可选）AI 推荐：`TMDB_ACCESS_TOKEN`、`DASHSCOPE_API_KEY`
+- （可选）AI 推荐：`TMDB_ACCESS_TOKEN`；LLM 默认本机 [Ollama](https://ollama.com/download)（见下方），或配置 `LLM_API_KEY` 走云端
 
 ## 首次运行
 
@@ -56,6 +59,14 @@ npm install
 mysql -u root -p < server/sql/init.sql
 ```
 
+可选：导入演示账号与口味种子（AI 推荐闭环演示）：
+
+```bash
+mysql -u root -p movie_db < server/sql/demo_seed.sql
+```
+
+账号 `demo_user`，密码 `123456`（详见 [runtime-and-config.md](docs/features/runtime-and-config.md)）。
+
 Windows PowerShell 若重定向不便，可在 MySQL 客户端中执行：
 
 ```sql
@@ -74,8 +85,28 @@ copy server\.env.example server\.env
 |------|------|
 | `DB_HOST` / `DB_USER` / `DB_PASS` / `DB_NAME` | 与 MySQL 一致，`DB_NAME` 默认为 `movie_db` |
 | `JWT_SECRET` | 任意足够长的随机字符串 |
+| `APP_PUBLIC_URL` | 邮箱验证/重置链接前缀，默认 `http://localhost:5173` |
 
-AI 推荐功能需额外配置 `TMDB_ACCESS_TOKEN` 与 `DASHSCOPE_API_KEY`，不配置时其余页面仍可正常使用。
+AI 推荐需 `TMDB_ACCESS_TOKEN`（搜片/详情）。**LLM 默认连本机 Ollama**（免费、无需云端 Key）：
+
+1. 安装 [Ollama](https://ollama.com/download)
+2. `ollama pull qwen2.5:7b`
+3. 保持 Ollama 运行（Windows 安装后一般已在后台）
+
+未装 Ollama 时，荐片页走本地口味降级，其余页面仍可用。换 DeepSeek/千问等云端模型：改 `server/.env` 中 `LLM_BASE_URL`、`LLM_MODEL`、`LLM_API_KEY`（详见 [runtime-and-config.md](docs/features/runtime-and-config.md)）。
+
+认证升级（已有库）：`mysql -u root -p movie_db < server/sql/auth_upgrade.sql`。详见 [auth-security.md](docs/features/auth-security.md)。
+
+运营与仪表盘（已有库，按顺序执行）：
+
+```bash
+mysql -u root -p movie_db < server/sql/analytics_ops_upgrade.sql
+mysql -u root -p movie_db < server/sql/rbac_upgrade.sql
+# 按需设置首个系统管理员
+# UPDATE users SET role = 'admin' WHERE id = 1 LIMIT 1;
+```
+
+新库直接执行 `init.sql` 已含四档 `role`，无需再跑 `rbac_upgrade.sql`。角色与权限详见 [ops-console.md](docs/features/ops-console.md)。
 
 ### 4. 启动
 
@@ -97,12 +128,14 @@ npm run dev:client
 
 ## 常见问题
 
+> 自动化集成测试：`cd server && npm test`（自动建独立 `movie_db_test` 库，不污染开发数据）。详见 [runtime-and-config.md](docs/features/runtime-and-config.md)。
+
 | 现象 | 处理 |
 |------|------|
 | `Cannot find module 'dotenv'` | 在根目录重新 `npm install` |
 | `数据库连接失败` | 检查 MySQL 是否启动、`server/.env` 账号密码、是否已执行 `init.sql` |
 | 前端白屏 / 模块找不到 | 在根目录 `npm install`，勿只在旧根目录单独装后端依赖 |
-| AI 推荐报错 | 检查 `TMDB_ACCESS_TOKEN`、`DASHSCOPE_API_KEY` 是否有效 |
+| AI 推荐报错 | 检查 `TMDB_ACCESS_TOKEN`；Ollama 是否运行且已 `ollama pull qwen2.5:7b`；或检查 `LLM_API_KEY` / `LLM_BASE_URL` |
 
 ## 生产构建（前端）
 
@@ -140,18 +173,20 @@ http://localhost:1337/api/movies?page=1&pageSize=12&sortBy=rating&sortOrder=desc
 需在可访问 `api.themoviedb.org` 的网络环境下执行（公司代理/DNS 异常时会出现 `fetch failed` 或超时）。
 
 1. 在 [TMDB API 设置](https://www.themoviedb.org/settings/api) 获取 **API Read Access Token (v4)**，写入 `server/.env` 的 `TMDB_ACCESS_TOKEN`。
-2. 确保 `movies` 表已有 `tmdb_id` 唯一索引（同步脚本依赖 upsert）。
-3. 在 `server` 目录执行（`3` 表示同步 3 页，每页约 20 条）：
+2. 推荐为 `movies.tmdb_id` 建唯一索引；若仅有基础建表脚本，同步会按现有列写入（见 [tmdb-sync.md](docs/features/tmdb-sync.md)）。
+3. 在 `server` 目录执行（`5` 表示 **每个 job** 同步 5 页，每页约 20 条）：
 
 ```bash
 cd server
-npm run sync:tmdb -- 3
+npm run sync:tmdb -- 5
 ```
 
-或直接：
+多任务增量示例：
 
 ```bash
-node scripts/syncTmdbMovies.js 5
+node scripts/syncTmdbMovies.js --jobs popular,top_rated --pages 5
+npm run sync:tmdb:daily
+npm run sync:tmdb:weekly
 ```
 
 ### 验收（MySQL）
@@ -170,3 +205,29 @@ SELECT tmdb_id, COUNT(*) c FROM movies WHERE tmdb_id IS NOT NULL GROUP BY tmdb_i
 ```
 
 预期 0 行。
+
+## 2 分钟演示脚本（答辩 / 录屏）
+
+前置：`init.sql` 已执行，可选 `demo_seed.sql`；`server/.env` 含 DB、JWT、**TMDB**；本机 Ollama 已 `pull qwen2.5:7b`（或配置 `LLM_API_KEY`）；`npm run dev` 已启动。
+
+Cloud Agent 上可将 `TMDB_ACCESS_TOKEN`、`LLM_API_KEY` 配在 [Cloud Agents Secrets](https://cursor.com/dashboard/cloud-agents)，并在环境中 **Update Existing Env** 后重跑；或本地执行 `server/scripts/sync-env-from-secrets.sh` 写入 `server/.env`（勿提交）。
+
+| 步骤 | 操作 | 预期 |
+| --- | --- | --- |
+| 1 | 打开首页，搜索关键词并观察列表上方 **来源**（本地 / TMDB 回写） | `meta.source` 与 hybrid 统计可展开查看 |
+| 2 | 登录 `demo_user` / `123456` | Refresh 写入 HttpOnly Cookie；access 仅内存 |
+| 3 | 进入 **AI 推荐**，输入「推荐几部悬疑片」 | 返回卡片；`meta.localMappedRatePercent` 较高；标签「已注入口味档案」 |
+| 4 | 点击 **查看详情** | 进入 `/movie/:localId` 站内页 |
+| 5 | 点击 **写笔记** 或滚动至观后笔记 | `#movie-review` 锚点定位表单 |
+| 6 | 提交一条评分与内容 | 刷新后列表可见；再次 AI 推荐仍带 `profileApplied` |
+
+### 效果指标速查
+
+| 能力 | 观测方式 |
+| --- | --- |
+| 列表 hybrid 命中率 | 首页来源提示 + `GET /api/movies/hybrid-stats` |
+| AI grounding | 推荐页 `meta.groundedCount` = 展示卡片数 |
+| 站内闭环 | 推荐卡片绿色「站内 ID」+ 详情/写笔记无外链 |
+| 口味档案 | 登录后 `meta.profileApplied: true` |
+
+详细契约见 [movie-list-query.md](docs/features/movie-list-query.md)、[ai-recommendation.md](docs/features/ai-recommendation.md)。

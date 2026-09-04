@@ -6,14 +6,14 @@ import { useNavigate } from 'react-router-dom'
 
 const profileReview = () => {
   const auth = useSelector(state => state.auth)
-  const { data: reviews } = useGetReviewQuery()
+  const { data: reviews } = useGetReviewQuery({ username: auth.userInfo?.username })
   const navigate = useNavigate()
 
   const [rows, setRows] = useState(2);
   const [expanded, setExpanded] = useState(false);
 
-  const reviewsarray = Array.isArray(reviews?.data) ? reviews.data : []
-  const reviewsArr = reviewsarray.filter(item => item.username === auth.userInfo?.username)
+  // 服务端已按 username 筛选，无需前端再次过滤
+  const reviewsArr = Array.isArray(reviews?.data) ? reviews.data : []
 
   const onClickHander = (item) => {
     navigate(`/movie/${item.movieId}`)

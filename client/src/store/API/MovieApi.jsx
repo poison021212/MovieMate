@@ -1,7 +1,8 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import { createApi } from '@reduxjs/toolkit/query/react'
+import { createBaseQueryWithReauth } from './baseQueryWithReauth'
+import { API_BASE, API_ORIGIN } from './apiBase'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:1337/api'
-const ORIGIN_BASE = API_BASE.replace('/api', '')
+const ORIGIN_BASE = API_ORIGIN
 const TMDB_IMG_BASE = 'https://image.tmdb.org/t/p/w500'
 
 // 统一海报地址规范化
@@ -33,13 +34,14 @@ function normalizePoster(poster) {
 
 const MovieApi = createApi({
   reducerPath: 'movieApi',
-  baseQuery: fetchBaseQuery({ baseUrl: API_BASE }),
+  baseQuery: createBaseQueryWithReauth(API_BASE),
   endpoints: (builder) => ({
     getMovies: builder.query({
       query: ({
         page = 1,
         pageSize = 12,
         q = '',
+        hybrid = false,
         sortBy = 'id',
         sortOrder = 'asc',
         minRating,
@@ -53,6 +55,7 @@ const MovieApi = createApi({
           sortOrder,
         })
         if (q) params.set('q', q)
+        if (hybrid) params.set('hybrid', '1')
         if (minRating !== undefined && minRating !== '' && minRating !== null) {
           params.set('minRating', String(minRating))
         }
@@ -76,7 +79,24 @@ const MovieApi = createApi({
             total: items.length,
             totalPages: 1,
           },
+          meta: baseQueryReturnValue.meta || {
+            source: 'local',
+            hybrid: false,
+            fallbackTriggered: false,
+            fallbackError: false,
+            fallbackErrorReason: null,
+            tmdbFetched: 0,
+            tmdbPersisted: 0,
+            aggregate: undefined,
+          },
         }
+      },
+    }),
+
+    getHybridSearchStats: builder.query({
+      query: () => 'movies/hybrid-stats',
+      transformResponse(baseQueryReturnValue) {
+        return baseQueryReturnValue.data || null
       },
     }),
 
@@ -95,5 +115,5 @@ const MovieApi = createApi({
   }),
 })
 
-export const { useGetMoviesQuery, useGetMoviesByIdQuery } = MovieApi
+export const { useGetMoviesQuery, useGetMoviesByIdQuery, useGetHybridSearchStatsQuery } = MovieApi
 export default MovieApi

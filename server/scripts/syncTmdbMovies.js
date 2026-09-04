@@ -1,176 +1,371 @@
 /**
- * TMDB -> MySQL 同步脚本（教学注释版）
- * 运行方式：
+ * TMDB -> MySQL 增量同步脚本 (终极整合版)
+ *
+ * 特性：
+ *   1. 支持命令行参数多任务：--jobs popular,now_playing
+ *   2. 支持代理配置 (HTTP_PROXY / HTTPS_PROXY)
+ *   3. 会对每条数据拉取 detail+credits 补全导演、演员、类型、时长等
+ *   4. 动态检查数据库表字段，数据库缺少的字段会自动忽略，不会报错
+ *
+ * 旧用法兼容：
  *   node scripts/syncTmdbMovies.js 5
- * 其中 5 表示同步 5 页（每页约 20 条）
+ *
+ * 新用法示例：
+ *   node scripts/syncTmdbMovies.js --jobs popular,top_rated --pages 3
+ *   node scripts/syncTmdbMovies.js --job now_playing --pages 2 --language zh-CN --region CN --delayMs 300
  */
 
 const path = require('path')
-
-// 1) 加载 server/.env，拿到 TMDB token 和数据库配置
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') })
-
-// 2) 复用你项目已有的数据库连接池（mysql2/promise）
 const db = require('../db')
 
-// 3) 常量配置：TMDB 地址、token、同步页数、节流时间
 const TMDB_TOKEN = process.env.TMDB_ACCESS_TOKEN
 const TMDB_BASE = 'https://api.themoviedb.org/3'
-const maxPages = Number(process.argv[2] || 5) // 支持命令行传参
-const delayMs = 250 // 每页后等待 250ms，避免请求过快
+const DEFAULT_DELAY_MS = 300
 
-// 4) 启动前防呆：没 token 就直接退出（避免空跑）
 if (!TMDB_TOKEN) {
   console.error('缺少 TMDB_ACCESS_TOKEN，请先配置 server/.env')
   process.exit(1)
 }
 
-// 5) 小工具：异步 sleep，用于节流
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+// ---------------- 1. 代理与网络请求配置 ----------------
+const PROXY_URL = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || ''
+let tmdbHttpFetch = fetch
+
+if (PROXY_URL) {
+  const { ProxyAgent, fetch: undiciFetch } = require('undici')
+  const proxyAgent = new ProxyAgent(PROXY_URL)
+  tmdbHttpFetch = (url, init) => undiciFetch(url, { ...init, dispatcher: proxyAgent })
+  try {
+    const u = new URL(PROXY_URL)
+    const port = u.port || (u.protocol === 'https:' ? '443' : '80')
+    console.log(`[代理设置] TMDB 请求经代理: ${u.hostname}:${port}`)
+  } catch {
+    console.log('[代理设置] TMDB 请求经代理已启用')
+  }
 }
 
-/**
- * 6) 拉取 TMDB 热门电影某一页
- * 为什么单独拆函数？
- * - 便于复用/测试
- * - 失败时能明确定位在哪一页请求异常
- */
-async function fetchPopular(page) {
-  const url = `${TMDB_BASE}/movie/popular?language=zh-CN&region=CN&page=${page}`
-
-  const resp = await fetch(url, {
+async function tmdbFetch(url) {
+  const resp = await tmdbHttpFetch(url, {
     headers: {
       Authorization: `Bearer ${TMDB_TOKEN}`,
       'Content-Type': 'application/json',
     },
   })
-
   if (!resp.ok) {
-    throw new Error(`TMDB 请求失败 page=${page}, status=${resp.status}`)
+    throw new Error(`TMDB 请求失败 url=${url}, status=${resp.status}`)
   }
-
   return resp.json()
 }
 
-/**
- * 7) 字段映射：把 TMDB 原始结构转成你本地 movies 表结构
- * 重点：
- * - tmdb_id 作为外部唯一标识
- * - poster_path 拼成完整 URL，前端可直接显示
- * - 对空值做兜底，降低脏数据影响
- */
-function mapMovie(m) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// ---------------- 2. 命令行参数解析 ----------------
+const JOB_ENDPOINT_MAP = {
+  popular: '/movie/popular',
+  top_rated: '/movie/top_rated',
+  now_playing: '/movie/now_playing',
+  upcoming: '/movie/upcoming',
+}
+
+function parseCliArgs(argv) {
+  const args = argv.slice(2)
+  const options = {
+    jobs: ['popular'],
+    pages: 5,
+    language: 'zh-CN',
+    region: 'CN',
+    delayMs: DEFAULT_DELAY_MS,
+  }
+
+  // 兼容旧用法： node script.js 5
+  if (args[0] && /^\d+$/.test(args[0])) {
+    options.pages = Math.max(Number(args[0]), 1)
+    return options
+  }
+
+  for (let i = 0; i < args.length; i++) {
+    const token = args[i]
+    const next = args[i + 1]
+    if ((token === '--job' || token === '--jobs') && next) {
+      options.jobs = next.split(',').map((item) => item.trim()).filter(Boolean)
+      i += 1
+      continue
+    }
+    if (token === '--pages' && next) {
+      options.pages = Math.max(Number(next) || 1, 1)
+      i += 1
+      continue
+    }
+    if (token === '--language' && next) {
+      options.language = next
+      i += 1
+      continue
+    }
+    if (token === '--region' && next) {
+      options.region = next
+      i += 1
+      continue
+    }
+    if (token === '--delayMs' && next) {
+      options.delayMs = Math.max(Number(next) || DEFAULT_DELAY_MS, 0)
+      i += 1
+    }
+  }
+
+  options.jobs = options.jobs.filter((job) => Object.prototype.hasOwnProperty.call(JOB_ENDPOINT_MAP, job))
+  if (!options.jobs.length) options.jobs = ['popular']
+  return options
+}
+
+// ---------------- 3. 数据抓取与格式转换 ----------------
+async function fetchGenreList(language) {
+  const data = await tmdbFetch(`${TMDB_BASE}/genre/movie/list?language=${language}`)
+  const map = {}
+  for (const g of data.genres || []) {
+    map[g.id] = g.name
+  }
+  return map
+}
+
+function yearFromReleaseDate(dateStr) {
+  if (!dateStr || dateStr.length < 4) return null
+  return dateStr.slice(0, 4)
+}
+
+function mapGenre(detail, genreById, listItem) {
+  if (detail?.genres?.length) {
+    return detail.genres.map((g) => g.name).join(', ')
+  }
+  const ids = listItem?.genre_ids
+  if (Array.isArray(ids) && ids.length && genreById) {
+    const names = ids.map((id) => genreById[id]).filter(Boolean)
+    return names.length ? names.join(', ') : null
+  }
+  return null
+}
+
+function mapDirector(credits) {
+  const crew = credits?.crew || []
+  const names = crew.filter((c) => c.job === 'Director').map((c) => c.name)
+  return names.length ? names.join(', ') : null
+}
+
+function mapActors(credits) {
+  const cast = credits?.cast || []
+  const names = cast.slice(0, 5).map((c) => c.name)
+  return names.length ? names.join(', ') : null
+}
+
+function mapDuration(runtime) {
+  if (runtime == null || runtime === 0) return null
+  return `${runtime} 分钟`
+}
+
+function mapMovie(listItem, detail, genreById) {
+  const releaseDate = detail?.release_date || listItem.release_date || null
+  const credits = detail?.credits || {}
+
   return {
-    tmdb_id: m.id,
-    title: m.title || m.original_title || '未知标题',
-    original_title: m.original_title || null,
-    original_language: m.original_language || null,
-    release_date: m.release_date || null, // YYYY-MM-DD
-    popularity: m.popularity ?? null,
-    vote_count: m.vote_count ?? null,
-    rating: m.vote_average ?? 0,
-    poster: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : null,
-    backdrop_path: m.backdrop_path || null,
-    summary: m.overview || null,
+    tmdb_id: listItem.id ?? null,
+    title: listItem.title || listItem.original_title || detail?.title || '未知标题',
+    original_title: listItem.original_title || detail?.original_title || null,
+    original_language: listItem.original_language || detail?.original_language || null,
+    release_date: releaseDate,
+    popularity: listItem.popularity ?? detail?.popularity ?? null,
+    vote_count: listItem.vote_count ?? detail?.vote_count ?? null,
+    rating: listItem.vote_average ?? detail?.vote_average ?? 0,
+    poster: (listItem.poster_path || detail?.poster_path)
+      ? `https://image.tmdb.org/t/p/w500${listItem.poster_path || detail.poster_path}`
+      : null,
+    backdrop_path: listItem.backdrop_path || detail?.backdrop_path || null,
+    summary: listItem.overview ?? detail?.overview ?? null,
+    year: yearFromReleaseDate(releaseDate),
+    genre: mapGenre(detail, genreById, listItem),
+    duration: mapDuration(detail?.runtime),
+    director: mapDirector(credits),
+    actors: mapActors(credits),
   }
 }
 
-/**
- * 8) 幂等写入（最核心）
- * ON DUPLICATE KEY UPDATE + uk_movies_tmdb_id(tmbd_id)
- * - 没有记录 -> INSERT
- * - 已有记录 -> UPDATE
- * 这就是“可重复执行同步任务”的关键
- */
-async function upsertMovie(movie) {
-  const sql = `
-    INSERT INTO movies
-    (tmdb_id, title, original_title, original_language, release_date, popularity, vote_count, rating, poster, backdrop_path, summary, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-    ON DUPLICATE KEY UPDATE
-      title = VALUES(title),
-      original_title = VALUES(original_title),
-      original_language = VALUES(original_language),
-      release_date = VALUES(release_date),
-      popularity = VALUES(popularity),
-      vote_count = VALUES(vote_count),
-      rating = VALUES(rating),
-      poster = VALUES(poster),
-      backdrop_path = VALUES(backdrop_path),
-      summary = VALUES(summary),
-      updated_at = NOW()
-  `
-
-  const params = [
-    movie.tmdb_id,
-    movie.title,
-    movie.original_title,
-    movie.original_language,
-    movie.release_date,
-    movie.popularity,
-    movie.vote_count,
-    movie.rating,
-    movie.poster,
-    movie.backdrop_path,
-    movie.summary,
-  ]
-
-  await db.query(sql, params)
+// ---------------- 4. 数据库动态操作 ----------------
+async function getMovieTableColumns() {
+  const [rows] = await db.query('SHOW COLUMNS FROM movies')
+  return new Set(rows.map((item) => item.Field))
 }
 
-/**
- * 9) 主流程
- * 顺序：
- * - 循环页码
- * - 每页拉取
- * - 每条 upsert
- * - 记录日志
- * - 单页失败不中断全局
- */
-async function main() {
-  console.log(`开始同步 TMDB 热门电影，页数=${maxPages}`)
+async function upsertMovie(movie, columns) {
+  if (!movie.title) return false
+  const hasTmdbId = columns.has('tmdb_id')
 
-  let totalFetched = 0
+  // 1. 判断数据库中是否已存在该条记录
+  let existingId = null
+  if (hasTmdbId && movie.tmdb_id) {
+    const [rows] = await db.query('SELECT id FROM movies WHERE tmdb_id = ? LIMIT 1', [movie.tmdb_id])
+    existingId = rows[0]?.id ?? null
+  } else {
+    const [rows] = await db.query('SELECT id FROM movies WHERE title = ? AND year <=> ? LIMIT 1', [
+      movie.title,
+      movie.year,
+    ])
+    existingId = rows[0]?.id ?? null
+  }
+
+  // 只提取数据库中实际存在的字段进行操作，防止报错
+  const insertPayload = {}
+  Object.keys(movie).forEach((field) => {
+    if (columns.has(field) && movie[field] !== undefined) {
+      insertPayload[field] = movie[field]
+    }
+  })
+
+  // 2. 如果存在，执行 UPDATE
+  if (existingId) {
+    const clauses = []
+    const params = []
+    Object.keys(insertPayload).forEach((field) => {
+      clauses.push(`${field} = ?`)
+      params.push(insertPayload[field])
+    })
+
+    // 如果有 updated_at 字段，手动触发更新时间
+    if (columns.has('updated_at')) {
+      clauses.push(`updated_at = NOW()`)
+    }
+
+    if (clauses.length > 0) {
+      await db.query(`UPDATE movies SET ${clauses.join(', ')} WHERE id = ?`, [...params, existingId])
+    }
+    return true
+  }
+
+  // 3. 如果不存在，执行 INSERT
+  const keys = Object.keys(insertPayload)
+  if (keys.length === 0) return false
+
+  let placeholders = keys.map(() => '?').join(', ')
+  let insertKeys = keys.join(', ')
+  const values = keys.map((key) => insertPayload[key])
+
+  // 如果有 updated_at 字段，插入当前时间
+  if (columns.has('updated_at')) {
+    insertKeys += ', updated_at'
+    placeholders += ', NOW()'
+  }
+
+  await db.query(`INSERT INTO movies (${insertKeys}) VALUES (${placeholders})`, values)
+  return true
+}
+
+// ---------------- 5. 任务调度逻辑 ----------------
+async function runJob(jobName, options, columns, genreById) {
+  const endpoint = JOB_ENDPOINT_MAP[jobName]
+  let fetched = 0
+  let upserted = 0
   let successPages = 0
   let failedPages = 0
 
-  for (let page = 1; page <= maxPages; page++) {
-    try {
-      const data = await fetchPopular(page)
-      const list = Array.isArray(data.results) ? data.results : []
+  console.log(`\n=== 任务开始: ${jobName}, 目标页数=${options.pages} ===`)
 
+  for (let page = 1; page <= options.pages; page++) {
+    try {
+      // 1. 获取列表
+      const listQuery = new URLSearchParams({ language: options.language, region: options.region, page: String(page) })
+      const listData = await tmdbFetch(`${TMDB_BASE}${endpoint}?${listQuery.toString()}`)
+      const list = Array.isArray(listData.results) ? listData.results : []
+      fetched += list.length
+
+      // 2. 遍历列表抓取详情并入库
       for (const item of list) {
-        const movie = mapMovie(item)
-        await upsertMovie(movie)
+        // 抓取详情获取 credits (导演、演员)
+        const detailQuery = new URLSearchParams({ language: options.language, append_to_response: 'credits' })
+        const detailUrl = `${TMDB_BASE}/movie/${item.id}?${detailQuery.toString()}`
+        let detail = null
+
+        try {
+          detail = await tmdbFetch(detailUrl)
+        } catch (e) {
+          console.warn(`    获取详情失败 TMDB_ID=${item.id}: ${e.message}`)
+        }
+
+        // 合并数据并存入数据库
+        const movieData = mapMovie(item, detail, genreById)
+        const ok = await upsertMovie(movieData, columns)
+        if (ok) upserted += 1
+
+        // 每次抓取详情后等待，防止频繁请求被封禁
+        await sleep(options.delayMs)
       }
 
-      totalFetched += list.length
       successPages += 1
-      console.log(`page=${page} 同步成功，条数=${list.length}`)
+      console.log(`[${jobName}] page=${page} 完成, 本页入库=${list.length}`)
     } catch (err) {
       failedPages += 1
-      console.error(`page=${page} 同步失败: ${err.message}`)
+      console.error(`[${jobName}] page=${page} 失败: ${err.message}`)
+      await sleep(options.delayMs) // 失败也稍微等待
     }
-
-    await sleep(delayMs)
   }
 
-  // 10) 收尾：输出可观测结果，便于你验收和复盘
+  return { jobName, fetched, upserted, successPages, failedPages }
+}
+
+// ---------------- 6. 主程序 ----------------
+async function main() {
+  const options = parseCliArgs(process.argv)
+  const columns = await getMovieTableColumns()
+  const results = []
+
+  console.log(
+    `开始 TMDB 增量同步:\n - 任务队列: ${options.jobs.join(', ')}\n - 抓取页数: ${options.pages}\n - 语言/地区: ${options.language} / ${options.region}\n - 延迟间隔: ${options.delayMs}ms`
+  )
+
+  // 获取 Genre 字典
+  let genreById = {}
+  try {
+    genreById = await fetchGenreList(options.language)
+    console.log(`已加载 TMDB 类型字典，共 ${Object.keys(genreById).length} 项`)
+  } catch (err) {
+    console.warn(`类型字典加载失败，将仅使用详情中的 genres: ${err.message}`)
+  }
+
+  // 运行所有指定任务
+  for (const jobName of options.jobs) {
+    results.push(await runJob(jobName, options, columns, genreById))
+  }
+
+  // 统计结果
+  const totals = results.reduce(
+    (acc, item) => {
+      acc.fetched += item.fetched
+      acc.upserted += item.upserted
+      acc.successPages += item.successPages
+      acc.failedPages += item.failedPages
+      return acc
+    },
+    { fetched: 0, upserted: 0, successPages: 0, failedPages: 0 }
+  )
+
   const [rows] = await db.query('SELECT COUNT(*) AS total FROM movies')
   const totalInDb = rows[0]?.total ?? 0
 
+  console.log('\n------------------------------')
+  console.log('同步统计报告：')
+  results.forEach((item) => {
+    console.log(
+      ` - [${item.jobName.padEnd(12)}] 获取=${item.fetched}, 入库=${item.upserted}, 成功页=${item.successPages}, 失败页=${item.failedPages}`
+    )
+  })
   console.log('------------------------------')
-  console.log(`同步完成：成功页=${successPages}，失败页=${failedPages}`)
-  console.log(`本轮抓取条数(含更新)=${totalFetched}`)
-  console.log(`当前数据库 movies 总数=${totalInDb}`)
-  console.log('------------------------------')
-
-  process.exit(0)
+  console.log(`总计汇总: 抓取记录=${totals.fetched}, 成功入库=${totals.upserted}`)
+  console.log(`数据库影片总数: ${totalInDb}`)
+  console.log('------------------------------\n')
 }
 
-// 11) 全局兜底：捕获未处理异常
-main().catch((err) => {
-  console.error('同步任务异常退出:', err)
-  process.exit(1)
-})
+main()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('同步任务异常退出:', err)
+    process.exit(1)
+  })

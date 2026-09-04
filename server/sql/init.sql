@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS users (
   username VARCHAR(15) NOT NULL UNIQUE,
   email VARCHAR(255) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
+  email_verified TINYINT(1) NOT NULL DEFAULT 0,
+  status ENUM('active', 'locked', 'banned') NOT NULL DEFAULT 'active',
+  role ENUM('user', 'moderator', 'operator', 'admin') NOT NULL DEFAULT 'user',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -46,6 +49,62 @@ CREATE TABLE IF NOT EXISTS favorites (
   movieId INT UNSIGNED NOT NULL,
   UNIQUE KEY uk_user_movie (username, movieId),
   CONSTRAINT fk_favorites_movie FOREIGN KEY (movieId) REFERENCES movies(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ai_recommend_sessions (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(15) NOT NULL,
+  title VARCHAR(255) NOT NULL DEFAULT '新会话',
+  summary TEXT DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_ai_sessions_user (username, updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ai_recommend_messages (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  session_id INT UNSIGNED NOT NULL,
+  role ENUM('user', 'assistant', 'system') NOT NULL,
+  content TEXT NOT NULL,
+  movies_json JSON DEFAULT NULL,
+  meta_json JSON DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_ai_msg_session FOREIGN KEY (session_id) REFERENCES ai_recommend_sessions(id) ON DELETE CASCADE,
+  KEY idx_ai_msg_session (session_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS review_replies (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  review_id INT UNSIGNED NOT NULL,
+  username VARCHAR(15) NOT NULL,
+  content TEXT NOT NULL,
+  date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_reply_review FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE,
+  KEY idx_reply_review (review_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  admin_username VARCHAR(15) NOT NULL,
+  action VARCHAR(64) NOT NULL,
+  target_type VARCHAR(32) NULL,
+  target_id VARCHAR(64) NULL,
+  detail JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_audit_admin (admin_username, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ai_recommend_feedback (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(15) NOT NULL,
+  session_id INT UNSIGNED NULL,
+  movie_title VARCHAR(255) NOT NULL,
+  local_movie_id INT UNSIGNED NULL,
+  tmdb_id INT UNSIGNED NULL,
+  action ENUM('like', 'dislike', 'refresh_batch') NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_feedback_user_time (username, created_at),
+  KEY idx_feedback_session (session_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 示例电影（可按需删除或替换 poster 为本地 /uploads/ 路径）
